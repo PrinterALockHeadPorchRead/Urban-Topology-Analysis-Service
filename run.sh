@@ -1,6 +1,8 @@
 #!/bin/bash
 
-export LOGS_DIRECTORY="$1/"
+cp template.yaml docker-compose.yaml
+
+sed -i "s+LOGS_DIR+$1+g" docker-compose.yaml
 
 docker compose up --build
 

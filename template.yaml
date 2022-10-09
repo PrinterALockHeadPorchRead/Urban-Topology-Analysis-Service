@@ -18,7 +18,7 @@ services:
     image: fastapi_service
     volumes:
       - type: bind
-        source: ${LOGS_DIRECTORY}
+        source: LOGS_DIR	 
         target: /app/logs
     restart: always
     depends_on:
