@@ -23,57 +23,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/api/car/{car_id}/", response_model=_schemas.Car)
+@app.get("/api/city/{city_id}/", response_model=_schemas.City)
 @logger.catch(exclude=_fastapi.HTTPException)
-async def get_car(
-    car_id: int, 
+async def get_city(
+    city_id: int, 
     db:_orm.Session = _fastapi.Depends(_services.get_db)
 ):
-    request = f"GET /api/car/{car_id}/"
+    request = f"GET /api/city/{city_id}/"
     status_code = 200
     detail = "OK"
 
-    car = await _services.get_car(car_id=car_id, db=db)
-    if car is None:
+    city = await _services.get_city(city_id=city_id, db=db)
+    if city is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise _fastapi.HTTPException(status_code=status_code, detail=detail)
     
     logger.info(f"{request} {status_code} {detail}")
-    return car
+    return city
 
-
-@app.post("/api/cars", response_model=List[_schemas.Car])
+@app.get("/api/city/", response_model=List[_schemas.City])
 @logger.catch(exclude=_fastapi.HTTPException)
-async def get_cars_by_fields(
-    required_car_fields: _schemas.GetCar,
-    db:_orm.Session = _fastapi.Depends(_services.get_db)
-):
-    request = f"GET /api/car/ {required_car_fields.to_str()}"
-    status_code = 200
-    detail = "OK"
-
-    cars = await _services.get_cars_by_fields(required_car_fields=required_car_fields, db=db)
-    if cars is None:
-        status_code = 404
-        detail = "NOT FOUND"
-        logger.error(f"{request} {status_code} {detail}")
-        raise _fastapi.HTTPException(status_code=status_code, detail=detail)
-    
-    logger.info(f"{request} {status_code} {detail}")
-    return cars
-
-
-
-@app.get("/api/car/", response_model=List[_schemas.Car])
-@logger.catch(exclude=_fastapi.HTTPException)
-async def get_cars(
+async def get_cities(
     page: int, 
     per_page : int,
     db:_orm.Session = _fastapi.Depends(_services.get_db)
 ):
-    request = f"GET /api/car/?page={page}&per_page={per_page}/"
+    request = f"GET /api/city/?page={page}&per_page={per_page}/"
     status_code = 200
     detail = "OK"
 
@@ -83,83 +60,73 @@ async def get_cars(
         logger.error(f"{request} {status_code} {detail}")
         raise _fastapi.HTTPException(status_code=status_code, detail=detail)
     
-    cars = await _services.get_cars(page=page, per_page=per_page, db=db)  
+    cities = await _services.get_cities(page=page, per_page=per_page, db=db)  
 
     logger.info(f"{request} {status_code} {detail}")
-    return cars
+    return cities
 
-
-@app.post("/api/car/", response_model=_schemas.Car)
+@app.post("/api/cities", response_model=List[_schemas.City])
 @logger.catch(exclude=_fastapi.HTTPException)
-async def create_car(
-    car_data: _schemas.CreateCar, 
-    db: _orm.Session = _fastapi.Depends(_services.get_db),
-):
-    request = f"POST /api/car/ {car_data.to_str()}"
-    status_code = 200
-    detail = "OK"
-
-    car = await _services.get_car_by_number(db=db, car_number=car_data.car_number)
-    if car is None:
-        car = await _services.create_car(car=car_data, db=db)
-    else:
-        car = await _services.update_car(car_data=car_data, car=car, db=db)
-        
-    logger.info(f"{request} {status_code} {detail}")
-    return car
-
-
-@app.delete("/api/car/{car_id}/")
-@logger.catch(exclude=_fastapi.HTTPException)
-async def delete_car(
-    car_id: int, 
+async def get_cities_by_fields(
+    required_city_fields: _schemas._BaseCity,
     db:_orm.Session = _fastapi.Depends(_services.get_db)
 ):
-    request = f"DELETE /api/car/{car_id}/"
+    request = f"GET /api/cities/ {required_city_fields.to_str()}"
     status_code = 200
     detail = "OK"
 
-    car = await _services.get_car(db=db, car_id=car_id)
-    if car is None:
+    cities = await _services.get_cities_by_fields(required_city_fields=required_city_fields, db=db)
+    if cities is None:
+        status_code = 404
+        detail = "NOT FOUND"
+        logger.error(f"{request} {status_code} {detail}")
+        raise _fastapi.HTTPException(status_code=status_code, detail=detail)
+    
+    logger.info(f"{request} {status_code} {detail}")
+    return cities
+
+
+@app.post("/api/city/", response_model=_schemas.City)
+@logger.catch(exclude=_fastapi.HTTPException)
+async def create_city(
+    city_info: _schemas._BaseCity, 
+    db: _orm.Session = _fastapi.Depends(_services.get_db),
+):
+    request = f"POST /api/city/ {city_info.to_str()}"
+    status_code = 200
+    detail = "OK"
+
+    city = await _services.get_city_by_name(db=db, city_name=city_info.city_name)
+    if city is None:
+        city = await _services.create_city(city=city_info, db=db)
+    else:
+        city = await _services.update_city(city_data=city_info, city=city, db=db)
+        
+    logger.info(f"{request} {status_code} {detail}")
+    return city
+
+
+@app.delete("/api/city/{city_id}/")
+@logger.catch(exclude=_fastapi.HTTPException)
+async def delete_city(
+    city_id: int, 
+    db:_orm.Session = _fastapi.Depends(_services.get_db)
+):
+    request = f"DELETE /api/city/{city_id}/"
+    status_code = 200
+    detail = "OK"
+
+    city = await _services.get_city(db=db, city_id=city_id)
+    if city is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise _fastapi.HTTPException(status_code=status_code, detail=detail)
 
-    await _services.delete_car(car, db=db)
+    await _services.delete_city(city, db=db)
 
     logger.info(f"{request} {status_code} {detail}")
     return f"{status_code} {detail}"
-
-
-@app.put("/api/car/", response_model=_schemas.Car)
-@logger.catch(exclude=_fastapi.HTTPException)
-async def update_car(
-    car_data: _schemas.UpdateCar,
-    db:_orm.Session = _fastapi.Depends(_services.get_db),
-):
-    request = "UPDATE /api/car/" + car_data.to_str()
-    status_code = 200
-    detail = "OK"
-    
-    car = await _services.get_car(db=db, car_id=car_data.id)
-    if car is None:
-        status_code = 404
-        detail = "NOT FOUND"
-        logger.error(f"{request} {status_code} {detail}")
-        raise _fastapi.HTTPException(status_code=status_code, detail=detail)
-
-    car_with_the_same_number = await _services.get_car_by_number(car_number=car_data.car_number, db=db)
-    if not car_with_the_same_number is None and car_with_the_same_number.id != car_data.id: 
-        status_code = 409
-        detail = "CAR WITH SUCH NUMBER ALREADY EXISTS"
-        logger.error(f"{request} {status_code} {detail}")
-        raise _fastapi.HTTPException(status_code=status_code, detail=detail)
-    
-    car = await _services.update_car(car_data=car_data, car=car, db=db)
-    logger.info(f"{request} {status_code} {detail}")
-    return car
-
 
 if __name__ == "__main__":
     _services._add_table()

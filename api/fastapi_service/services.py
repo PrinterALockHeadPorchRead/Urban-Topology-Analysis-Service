@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 def _add_table():
     inspector = _inspector.from_engine(_database.engine)
-    if not _models.Car.__tablename__ in inspector.get_table_names():
+    if not _models.City.__tablename__ in inspector.get_table_names():
         return _database.Base.metadata.create_all(bind=_database.engine)
 
 def get_db():
@@ -20,68 +20,53 @@ def get_db():
     finally:
         db.close()
 
-async def create_car(car: _schemas.CreateCar, db: "Session") -> _schemas.Car:
-    car = _models.Car(**car.dict())
-    db.add(car)
+async def create_city(city: _schemas._BaseCity, db: "Session") -> _schemas.City:
+    city = _models.City(**city.dict())
+    db.add(city)
     db.commit()
-    db.refresh(car)
-    return _schemas.Car.from_orm(car)
+    db.refresh(city)
+    return _schemas.City.from_orm(city)
 
-async def get_cars(page: int, per_page: int, db: "Session") -> List[_schemas.Car]:
-    cars = db.query(_models.Car).all()
-    cars = cars[page * per_page : (page + 1) * per_page]
-    return list(map(_schemas.Car.from_orm, cars))
+async def get_cities(page: int, per_page: int, db: "Session") -> List[_schemas.City]:
+    cities = db.query(_models.City).all()
+    cities = cities[page * per_page : (page + 1) * per_page]
+    return list(map(_schemas.City.from_orm, cities))
 
+async def get_city(city_id: int, db: "Session") -> _schemas.City:
+    city = db.query(_models.City).filter(_models.City.id == city_id).first()
+    return city
 
-async def get_car(car_id: int, db: "Session") -> _schemas.Car:
-    car = db.query(_models.Car).filter(_models.Car.id == car_id).first()
-    return car
-
-async def get_car_by_number(car_number: str, db: "Session") -> _schemas.Car:
-    if car_number is None:
+async def get_city_by_name(city_name: str, db: "Session") -> _schemas.City:
+    if city_name is None:
         return None
-    car = db.query(_models.Car).filter(_models.Car.car_number == car_number).first()
-    return car
+    city = db.query(_models.City).filter(_models.City.city_name == city_name).first()
+    return city
 
-async def get_cars_by_fields(required_car_fields: _schemas.UpdateCar, db: "Session") -> List[_schemas.Car]:
-    query = db.query(_models.Car)
+async def get_cities_by_fields(required_city_fields: _schemas._BaseCity, db: "Session") -> List[_schemas.City]:
+    query = db.query(_models.City)
 
-    if not required_car_fields.car_number is None: 
-        query = query.filter(_models.Car.car_number == required_car_fields.car_number)
-    if not required_car_fields.model is None:      
-        query = query.filter(_models.Car.model == required_car_fields.model)
-    if not required_car_fields.owner is None:      
-        query = query.filter(_models.Car.owner == required_car_fields.owner)
-    if not required_car_fields.odometer is None:   
-        query = query.filter(_models.Car.odometer == required_car_fields.odometer)
+    if required_city_fields.city_name != '' and not required_city_fields.city_name is None: 
+        query = query.filter(_models.City.city_name == required_city_fields.city_name)
+    if required_city_fields.country != '' and not required_city_fields.city_name is None:      
+        query = query.filter(_models.City.country == required_city_fields.country)
+    if required_city_fields.region != '' and not required_city_fields.city_name is None:      
+        query = query.filter(_models.City.region == required_city_fields.region)
 
     return query.all()
 
-async def delete_car(car: _models.Car, db: "Session"):
-    db.delete(car)
+async def delete_city(city: _models.City, db: "Session"):
+    db.delete(city)
     db.commit()
 
-async def update_car(car_data: _schemas.CreateCar, car: _models.Car, db: "Session") -> _schemas.Car:
-    car.car_number = car_data.car_number
-    if not car_data.model is None:      car.model = car_data.model
-    if not car_data.owner is None:      car.owner = car_data.owner
-    if not car_data.odometer is None:   car.odometer = car_data.odometer
-    if not car_data.picture is None:    car.picture = car_data.picture
+async def update_city(city_data: _schemas._BaseCity, city: _models.City, db: "Session") -> _schemas.City:
+    if not city_data.country is None and city_data.country != '':      
+        city.country = city_data.country
+    if not city_data.region is None and city_data.country != '':      
+        city.region = city_data.region
 
     db.commit()
-    db.refresh(car)
+    db.refresh(city)
 
-    return _schemas.Car.from_orm(car)
+    return _schemas.City.from_orm(city)
 
-async def update_car(car_data: _schemas.UpdateCar, car: _models.Car, db: "Session") -> _schemas.Car:
-    if not car_data.car_number is None: car.car_number = car_data.car_number
-    if not car_data.model is None:      car.model = car_data.model
-    if not car_data.owner is None:      car.owner = car_data.owner
-    if not car_data.odometer is None:   car.odometer = car_data.odometer
-    if not car_data.picture is None:    car.picture = car_data.picture
-
-    db.commit()
-    db.refresh(car)
-
-    return _schemas.Car.from_orm(car)
     
