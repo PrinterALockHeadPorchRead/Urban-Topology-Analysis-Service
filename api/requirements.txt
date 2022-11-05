@@ -3,3 +3,5 @@ SQLAlchemy
 psycopg2-binary
 uvicorn
 loguru
+pandas
+osmnx

@@ -4204,3 +4204,5 @@ WHERE city.city_name = %(city_name_1)s
 2022-10-12T20:13:28.678589+0000: INFO|	 POST /api/city/ { city_name : Санкт Петербург, country : Россия, region : Ленобласть } 200 OK
 2022-10-12T20:13:34.866739+0000: INFO|	 GET /api/city/?page=0&per_page=10/ 200 OK
 2022-10-12T20:13:34.866739+0000: INFO|	 GET /api/city/?page=0&per_page=10/ 200 OK
+2022-11-05T22:19:21.613319+0000: INFO|	 GET /api/cities?page=0&per_page=10/ 200 OK
+2022-11-05T22:19:21.613319+0000: INFO|	 GET /api/cities?page=0&per_page=10/ 200 OK

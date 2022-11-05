@@ -1,28 +1,28 @@
-from typing import Optional
-import pydantic as _pydantic
+from pydantic import BaseModel
+from typing import Optional, List
 
-class _BaseCity(_pydantic.BaseModel):
-    country : Optional[str] = ''
-    region : Optional[str] = ''
-    city_name : str
+
+class PointBase(BaseModel):
+    longitude : float
+    latitude : float
+
+class PropertyBase(BaseModel):
+    population : int
+    population_density : Optional[float]
+    center : Optional[PointBase]
+    time_zone : str
+    time_created : str
+
+class CityBase(BaseModel):
+    id : int 
+    city_name : str 
+    property : Optional[PropertyBase] 
+    downloaded : Optional[bool] = False
+
+class RegionBase(BaseModel):
+    admin_level : int
+    regions : str
+
+
     
-    def to_str(self):
-        return ("{ " + 
-                f"city_name : {self.city_name}, " +
-                f"country : {self.country}, " +
-                f"region : {self.region}" +
-                " }")
 
-class City(_BaseCity):
-    id : int
-
-    class Config:
-        orm_mode = True
-
-    def to_str(self):
-        return ("{ " + 
-                f"city_id : {self.id}, " +
-                f"city_name : {self.city_name}, " +
-                f"country : {self.country}, " +
-                f"region : {self.region}" +
-                " }")
