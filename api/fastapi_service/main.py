@@ -3,12 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException
 from uvicorn import run
 from os import getenv
-from services import add_tables, init_db
 from schemas import CityBase, RegionBase
 
+import geopandas as gpd
 import services
 import logs 
 
+regions_df = gpd.read_file('./data/regions.json', driver='GeoJSON')
 app = FastAPI()
 logger = logs.init()
 
@@ -21,8 +22,8 @@ app.add_middleware(
 )
 
 if __name__ == "__main__":
-    add_tables() 
-    init_db()
+    services.add_tables() 
+    services.init_db()
     run("main:app", host="0.0.0.0", port=getenv("PORT", 8002))
 
 @app.get("/api/city/", response_model=CityBase)
@@ -115,7 +116,7 @@ async def city_regions(
     status_code = 200
     detail = "OK"
 
-    regions = await services.get_regions(city_id=city_id)
+    regions = await services.get_regions(city_id=city_id, regions=regions_df)
     if regions is None:
         status_code = 404
         detail = "NOT FOUND"

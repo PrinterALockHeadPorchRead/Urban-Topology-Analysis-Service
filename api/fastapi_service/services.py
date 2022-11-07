@@ -7,7 +7,6 @@ import osmnx as ox
 import geopandas as gpd
 import os.path
 
-
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
@@ -182,8 +181,7 @@ def region_to_scheme(regions : gpd.geodataframe.GeoDataFrame, ids_list : List[in
     region = RegionBase(admin_level=depth, regions=to_json_array(str(polygons.iloc[0]['geometry'].boundary)))
     return region, ids_list
 
-def regions_to_scheme(city : City) -> List[RegionBase]:
-    regions = gpd.read_file('./data/regions.json', driver='GeoJSON')
+def regions_to_scheme(city : City, regions : gpd.geodataframe.GeoDataFrame,) -> List[RegionBase]:
     regions_list = []
 
     ids_list = regions[regions['local_name']==city.city_name]['osm_id'].to_list()
@@ -195,10 +193,10 @@ def regions_to_scheme(city : City) -> List[RegionBase]:
         
     return regions_list
 
-async def get_regions(city_id : int) -> List[RegionBase]:
+async def get_regions(city_id : int, regions : gpd.geodataframe.GeoDataFrame,) -> List[RegionBase]:
     with SessionLocal.begin() as session:
         city = session.query(City).get(city_id)
         if city is None:
             return None
 
-        return regions_to_scheme(city=city)
+        return regions_to_scheme(city=city, regions=regions)
