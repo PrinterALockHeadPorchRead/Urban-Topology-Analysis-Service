@@ -1,8 +1,0 @@
-.*
-ui/
-logs/
-experiments/
-api/fastapi_service/__pycache__
-README.md
-docker-compose.yaml
-**/cache/
