@@ -20,8 +20,10 @@ class CityBase(BaseModel):
     downloaded : Optional[bool] = False
 
 class RegionBase(BaseModel):
-    admin_level : int
-    regions : str
+    id : int
+    depth : int
+    name : str
+    regions : List[List[List[float]]]
 
 
     

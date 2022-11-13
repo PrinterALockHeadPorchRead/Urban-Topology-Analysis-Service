@@ -1,6 +1,9 @@
 from database import engine, Base, SessionLocal
 from models import City, CityProperty, Point
 from schemas import CityBase, PropertyBase, PointBase, RegionBase
+from shapely.geometry.multilinestring import MultiLineString
+from shapely.geometry.linestring import LineString
+from geopandas.geodataframe import GeoDataFrame
 from typing import List, TYPE_CHECKING, Tuple
 import pandas as pd
 import osmnx as ox
@@ -168,32 +171,51 @@ async def delete_city(city_id : int) -> CityBase:
         session.flush()
         return city_to_scheme(city=city, session=session)
 
-def to_json_array(polygon_str : str):
-    polygon_str = polygon_str.replace('MULTILINESTRING ', '').replace('LINESTRING ', '')
-    polygon_str = polygon_str.replace(', ', '],[').replace(' ', ',')
-    polygon_str = polygon_str.replace('(', '[').replace(')', ']')
-    polygon_str = "[" + polygon_str + ']'
-    return polygon_str
+def to_list(polygon : LineString):
+    list = []
+    for x, y in polygon.coords:
+        list.append([x, y])
+    return list
 
-def region_to_scheme(regions : gpd.geodataframe.GeoDataFrame, ids_list : List[int], depth : int) -> Tuple[RegionBase, List[int]]:
+def to_json_array(polygon):
+    coordinates_list = []
+    if type(polygon) == LineString:
+       coordinates_list.append(to_list(polygon))
+    elif type(polygon) == MultiLineString:
+        for line in polygon.geoms:
+            coordinates_list.append(to_list(line))
+    else:
+        raise ValueError("polygon must be type of LineString or MultiLineString")
+
+    return coordinates_list
+
+def region_to_scheme(regions : GeoDataFrame, ids_list : List[int], depth : int) -> Tuple[List[RegionBase], List[int]]:
+    regions_list = [] 
     polygons = regions[regions['osm_id'].isin(ids_list)]
     ids_list = regions[regions['parents'].str.contains('|'.join(str(x) for x in ids_list), na=False)]['osm_id'].to_list()
-    region = RegionBase(admin_level=depth, regions=to_json_array(str(polygons.iloc[0]['geometry'].boundary)))
-    return region, ids_list
+    for index, row in polygons.iterrows():
+        id = row['osm_id']
+        name = row['local_name']
+        regions_array = to_json_array(row['geometry'].boundary)
+        base = RegionBase(id=id, name=name, depth=depth, regions=regions_array)
+        print(base)
+        regions_list.append(base)
 
-def regions_to_scheme(city : City, regions : gpd.geodataframe.GeoDataFrame,) -> List[RegionBase]:
+    return regions_list, ids_list
+
+def regions_to_scheme(city : City, regions : GeoDataFrame) -> List[RegionBase]:
     regions_list = []
 
     ids_list = regions[regions['local_name']==city.city_name]['osm_id'].to_list()
     depth = 0
     while len(ids_list) != 0:
-        region, ids_list = region_to_scheme(regions=regions, ids_list=ids_list, depth=depth)
-        regions_list.append(region)
+        new_regions_list, ids_list = region_to_scheme(regions=regions, ids_list=ids_list, depth=depth)
+        regions_list.extend(new_regions_list)
         depth += 1
         
     return regions_list
 
-async def get_regions(city_id : int, regions : gpd.geodataframe.GeoDataFrame,) -> List[RegionBase]:
+async def get_regions(city_id : int, regions : GeoDataFrame) -> List[RegionBase]:
     with SessionLocal.begin() as session:
         city = session.query(City).get(city_id)
         if city is None:
