@@ -17,9 +17,10 @@ services:
       context: api/
     image: fastapi_service
     volumes:
-      - type: bind
-        source: LOGS_DIR	 
-        target: /app/logs
+      - logsvol:/app/logs
+      # delete after development
+      - ./api/fastapi_service:/app/fastapi_service
+      # delete after development
     restart: always
     depends_on:
       - postgres
@@ -36,4 +37,5 @@ services:
       - "3000:3000"
 
 volumes:     
-  pgdata:    
+  pgdata:
+  logsvol:

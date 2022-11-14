@@ -1,5 +1,6 @@
-from database import engine, Base, SessionLocal
+from database import engine, Base, SessionLocal, database
 from models import City, CityProperty, Point
+from database import CityAsync, CityPropertyAsync, PointAsync
 from schemas import CityBase, PropertyBase, PointBase, RegionBase
 from shapely.geometry.multilinestring import MultiLineString
 from shapely.geometry.linestring import LineString
@@ -7,7 +8,6 @@ from geopandas.geodataframe import GeoDataFrame
 from typing import List, TYPE_CHECKING, Tuple
 import pandas as pd
 import osmnx as ox
-import geopandas as gpd
 import os.path
 
 if TYPE_CHECKING:
@@ -29,44 +29,52 @@ def point_to_scheme(point : Point) -> PointBase:
 
     return PointBase(latitude=point.latitude, longitude=point.longitude)
 
-def property_to_scheme(property : CityProperty, session : "Session") -> PropertyBase:
+async def property_to_scheme(property : CityProperty) -> PropertyBase:
     if property is None:
         return None
 
     property_base = PropertyBase(population=property.population, population_density=property.population_density, time_zone=property.time_zone, time_created=str(property.time_created))
-    point = session.query(Point).filter(Point.id==property.id_center).first()
+    # point = session.query(Point).filter(Point.id==property.id_center).first()
+    query = PointAsync.select().where(PointAsync.c.id == property.id_center)
+    point = await database.fetch_one(query)
     point_base = point_to_scheme(point=point)
     property_base.center = point_base
     
     return property_base
 
-def city_to_scheme(city : City, session : "Session") -> CityBase:
+async def city_to_scheme(city : City) -> CityBase:
     if city is None:
         return None
 
     city_base = CityBase(id=city.id, city_name=city.city_name, downloaded=city.downloaded)
-    property = session.query(CityProperty).filter(CityProperty.id==city.id_property).first()
-    property_base = property_to_scheme(property=property, session=session)
+    #property = session.query(CityProperty).filter(CityProperty.id==city.id_property).first()
+    query = CityPropertyAsync.select().where(CityPropertyAsync.c.id == city.id_property)
+    property = await database.fetch_one(query)
+    property_base = await property_to_scheme(property=property)
     city_base.property = property_base
     
     return city_base
 
-def cities_to_scheme_list(cities : List[City], session : "Session") -> List[CityBase]:
+async def cities_to_scheme_list(cities : List[City]) -> List[CityBase]:
     schemas = []
     for city in cities:
-        schemas.append(city_to_scheme(city=city, session=session))
+        schemas.append(await city_to_scheme(city=city))
     return schemas
 
 async def get_cities(page: int, per_page: int) -> List[CityBase]:
-    with SessionLocal.begin() as session:
-        cities = session.query(City).all()
-        cities = cities[page * per_page : (page + 1) * per_page]
-        return cities_to_scheme_list(cities, session)
+    # with SessionLocal.begin() as session:
+    #     cities = session.query(City).all()
+    query = CityAsync.select()
+    cities = await database.fetch_all(query)
+    cities = cities[page * per_page : (page + 1) * per_page]
+    return await cities_to_scheme_list(cities)
 
 async def get_city(city_id: int) -> CityBase:
-    with SessionLocal.begin() as session:
-        city = session.query(City).get(city_id)
-        return city_to_scheme(city=city, session=session)
+    # with SessionLocal.begin() as session:
+    #     city = session.query(City).get(city_id)
+    query = CityAsync.select().where(CityAsync.c.id == city_id)
+    city = await database.fetch_one(query)
+    return await city_to_scheme(city=city)
 
 def add_info_to_db(city : pd.core.frame.DataFrame):
     with SessionLocal.begin() as session:
@@ -161,15 +169,16 @@ async def download_city(city_id : int, extension : float) -> CityBase:
         return city_to_scheme(city=city, session=session)
 
 async def delete_city(city_id : int) -> CityBase:
-    with SessionLocal.begin() as session:
-        city = session.query(City).get(city_id)
-        if city is None:
-            return None
-            
-        delete_info(city=city)
-        city.downloaded = False
-        session.flush()
-        return city_to_scheme(city=city, session=session)
+    # with SessionLocal.begin() as session:
+    #     city = session.query(City).get(city_id)
+    query = CityAsync.select().where(CityAsync.c.id == city_id)
+    city = await database.fetch_one(query)
+    if city is None:
+        return None
+        
+    delete_info(city=city)
+    city.downloaded = False
+    return await city_to_scheme(city=city)
 
 def to_list(polygon : LineString):
     list = []
@@ -198,7 +207,7 @@ def region_to_scheme(regions : GeoDataFrame, ids_list : List[int], depth : int) 
         name = row['local_name']
         regions_array = to_json_array(row['geometry'].boundary)
         base = RegionBase(id=id, name=name, depth=depth, regions=regions_array)
-        print(base)
+        #print(base)
         regions_list.append(base)
 
     return regions_list, ids_list
@@ -215,10 +224,11 @@ def regions_to_scheme(city : City, regions : GeoDataFrame) -> List[RegionBase]:
         
     return regions_list
 
-async def get_regions(city_id : int, regions : GeoDataFrame) -> List[RegionBase]:
+def get_regions(city_id : int, regions : GeoDataFrame) -> List[RegionBase]:
     with SessionLocal.begin() as session:
         city = session.query(City).get(city_id)
+    # query = CityAsync.select().filter(CityAsync.c.id == city_id)
+    # city = database.fetch_one(query)
         if city is None:
             return None
-
         return regions_to_scheme(city=city, regions=regions)

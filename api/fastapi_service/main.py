@@ -1,9 +1,10 @@
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from uvicorn import run
 from os import getenv
 from schemas import CityBase, RegionBase
+from database import database, engine, metadata
 
 import geopandas as gpd
 import services
@@ -24,7 +25,19 @@ app.add_middleware(
 if __name__ == "__main__":
     services.add_tables() 
     services.init_db()
-    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002))
+    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
+
+metadata.create_all(engine)
+
+@app.on_event("startup")
+async def startup():
+    await database.connect()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await database.disconnect()
+
 
 @app.get("/api/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
@@ -45,26 +58,22 @@ async def get_city(
     logger.info(f"{request} {status_code} {detail}")
     return city
 
+
 @app.get("/api/cities/", response_model=List[CityBase])
 @logger.catch(exclude=HTTPException)
 async def get_cities(
-    page: int, 
-    per_page : int
+    page: int = Query(ge=0), 
+    per_page : int = Query(gt=0)
 ): 
     request = f"GET /api/cities?page={page}&per_page={per_page}/"
     status_code = 200
     detail = "OK"
 
-    if page < 0 or per_page <= 0:
-        status_code = 400
-        detail = "BAD REQUEST"
-        logger.error(f"{request} {status_code} {detail}")
-        raise HTTPException(status_code=status_code, detail=detail)
-    
     cities = await services.get_cities(page=page, per_page=per_page)  
 
     logger.info(f"{request} {status_code} {detail}")
     return cities
+
 
 @app.get("/api/download/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
@@ -83,11 +92,11 @@ async def download_city(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    
     logger.info(f"{request} {status_code} {detail}")
     return city
 
-@app.get("/api/delete/city/", response_model=CityBase)
+
+@app.delete("/api/delete/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
 async def delete_city(
     city_id: int
@@ -103,26 +112,26 @@ async def delete_city(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    
     logger.info(f"{request} {status_code} {detail}")
     return city
 
+
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
-async def city_regions(
+def city_regions(
     city_id: int
-): 
+):
     request = f"GET /api/regions/city?city_id={city_id}/"
     status_code = 200
     detail = "OK"
 
-    regions = await services.get_regions(city_id=city_id, regions=regions_df)
+    regions = services.get_regions(city_id=city_id, regions=regions_df)
     if regions is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    
     logger.info(f"{request} {status_code} {detail}")
+    #print(regions)
     return regions
