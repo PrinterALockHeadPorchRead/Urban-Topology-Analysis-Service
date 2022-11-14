@@ -110,19 +110,19 @@ async def delete_city(
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
 async def city_regions(
-    city_id: int
+    city_id: int,
+    depth: int
 ): 
     request = f"GET /api/regions/city?city_id={city_id}/"
     status_code = 200
     detail = "OK"
 
-    regions = await services.get_regions(city_id=city_id, regions=regions_df)
+    regions = await services.get_regions(city_id=city_id, regions=regions_df, depth=depth)
     if regions is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    
     logger.info(f"{request} {status_code} {detail}")
     return regions
