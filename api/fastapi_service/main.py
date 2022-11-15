@@ -1,10 +1,13 @@
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from uvicorn import run
 from os import getenv
 from schemas import CityBase, RegionBase
 from database import database, engine, metadata
+
+import pandas as pd
 
 import geopandas as gpd
 import services
@@ -96,6 +99,78 @@ async def download_city(
     return city
 
 
+@app.get("/api/regions/city/", response_model=List[RegionBase])
+@logger.catch(exclude=HTTPException)
+def city_regions(
+    city_id: int
+):
+    request = f"GET /api/regions/city?city_id={city_id}/"
+    status_code = 200
+    detail = "OK"
+
+    regions = services.get_regions(city_id=city_id, regions=regions_df)
+    if regions is None:
+        status_code = 404
+        detail = "NOT FOUND"
+        logger.error(f"{request} {status_code} {detail}")
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    logger.info(f"{request} {status_code} {detail}")
+    return regions
+
+@app.get('/api/city/graph/region/')
+@logger.catch(exclude=HTTPException)
+async def city_graph(
+    city_id: int,
+    region_id: int,
+):
+    request = f"POST api/cities/graph/?city_id={city_id}&region={region_id}"
+    status_code = 200
+    detail = "OK"
+
+    graph = await services.graph_from_id(city_id = city_id, region_id=region_id)
+    if graph is None:
+        status_code = 404
+        detail = "NOT FOUND"
+        logger.error(f"{request} {status_code} {detail}")
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+
+    return StreamingResponse(
+    iter([response]),
+    media_type='text/csv',
+    headers={"Content-Disposition":
+             f"attachment;filename=<{city_id}_{region_id}>.csv"})
+
+
+@app.post('/api/city/graph/bbox/{city_id}/')
+@logger.catch(exclude=HTTPException)
+async def city_graph(
+    city_id: int,
+    polygon: List[RegionBase],
+):
+    request = f"POST api/cities/graph/{city_id}/"
+    status_code = 200
+    detail = "OK"
+
+    graph = await services.graph_from_poly(id = city_id, polygon = polygon)
+    
+    if graph is None:
+        status_code = 404
+        detail = "NOT FOUND"
+        logger.error(f"{request} {status_code} {detail}")
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+
+    return StreamingResponse(
+    iter([response]),
+    media_type='text/csv',
+    headers={"Content-Disposition":
+             f"attachment;filename=<{city_id}>.csv"})
+
+
 @app.delete("/api/delete/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
 async def delete_city(
@@ -114,24 +189,3 @@ async def delete_city(
 
     logger.info(f"{request} {status_code} {detail}")
     return city
-
-
-@app.get("/api/regions/city/", response_model=List[RegionBase])
-@logger.catch(exclude=HTTPException)
-def city_regions(
-    city_id: int
-):
-    request = f"GET /api/regions/city?city_id={city_id}/"
-    status_code = 200
-    detail = "OK"
-
-    regions = services.get_regions(city_id=city_id, regions=regions_df)
-    if regions is None:
-        status_code = 404
-        detail = "NOT FOUND"
-        logger.error(f"{request} {status_code} {detail}")
-        raise HTTPException(status_code=status_code, detail=detail)
-
-    logger.info(f"{request} {status_code} {detail}")
-    #print(regions)
-    return regions

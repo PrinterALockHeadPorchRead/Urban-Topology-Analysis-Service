@@ -116,7 +116,7 @@ def init_db():
     for row in range(0, cities.shape[0]):
         add_info_to_db(cities.loc[row, :])
 
-def download_info(city : City, extension : float):
+async def download_info(city : City, extension : float):
     filePath = f'./data/graphs/{city}.osm'
     if os.path.isfile(filePath):
         print(f'Exists: {filePath}')
@@ -159,14 +159,16 @@ def delete_info(city : City):
         
 
 async def download_city(city_id : int, extension : float) -> CityBase:
-    with SessionLocal.begin() as session:
-        city = session.query(City).get(city_id)
-        if city is None:
-            return None
-            
-        city.downloaded = download_info(city=city, extension=extension)
-        session.flush()
-        return city_to_scheme(city=city, session=session)
+    # with SessionLocal.begin() as session:
+    #     city = session.query(City).get(city_id)
+    query = CityAsync.select().where(CityAsync.c.id == city_id)
+    city = await database.fetch_one(query)
+    if city is None:
+        return None
+        
+    city.downloaded = await download_info(city=city, extension=extension)
+
+    return city_to_scheme(city=city)
 
 async def delete_city(city_id : int) -> CityBase:
     # with SessionLocal.begin() as session:
@@ -232,3 +234,9 @@ def get_regions(city_id : int, regions : GeoDataFrame) -> List[RegionBase]:
         if city is None:
             return None
         return regions_to_scheme(city=city, regions=regions)
+
+async def graph_from_poly(id,polygon):
+    pass
+
+async def graph_from_id(city_id, region_id):
+    pass
