@@ -1,0 +1,33 @@
+<div class="wrapper">
+    <a name="map"></a>
+    <div class="mapWrapper">
+        <ng-container *ngIf="town">
+            <app-map 
+                class="map" 
+                [center]="getCenter()" 
+                [cityFeatures]="town.districts"
+                (graphInfo)="handlePolygon($event)" 
+            ></app-map> <!-- handlePolygon($event) вызывается при изменении graphInfo и реагирует на изменение. getCenter() вызывается при отрисовке блока и присваивает значение center-->
+        </ng-container>
+    </div>
+    <div class="graphWrapper">
+        <div  style="height: 100vh">
+            <a name="graph"></a>
+            <app-graph *ngIf="graph" #graphComponent [name]="graphName"></app-graph>
+        </div>
+        <div style="height: 100vh">
+            <a name="roads"></a>
+            <app-roads *ngIf="roadBounds" [bounds]="roadBounds"></app-roads>
+        </div>
+    </div>
+</div>
+<button *ngIf="graph" class="goDown" (click)="goDown()" title="To graphs" >
+    <span class="material-symbols-outlined">
+        arrow_downward
+    </span>
+</button>
+<button *ngIf="graph" class="goUp" (click)="goUp()" title="To map" >
+    <span class="material-symbols-outlined">
+        arrow_upward
+    </span>
+</button>

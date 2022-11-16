@@ -1,0 +1,44 @@
+.wrapper{
+    overflow: hidden;
+    position: relative;
+    height: calc(100vh - 64px);
+    /* padding-right: 64px; */
+}
+
+.graphWrapper{
+    display: flex;
+    flex-wrap: wrap;
+}
+.graphWrapper div{
+    flex: 1 0 50%;
+    min-width: 500px;
+}
+
+.mapWrapper{
+    height: 100%;
+    /* width: 100vw; */
+}
+
+
+.menu:hover{
+    background: #cdcdcd;
+}
+
+
+.goDown, .goUp{
+    position: fixed;
+    bottom: 2em;
+    left: 2em;
+    z-index: 999;
+    border: 0;
+    border-radius: 50%;
+    padding: 0;
+    height: 36px;
+    width: 36px;
+    cursor: pointer;
+    user-select: none; 
+}
+
+.goUp{
+    bottom: 5em;
+}

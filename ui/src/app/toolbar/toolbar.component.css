@@ -1,0 +1,23 @@
+.toolbar{
+    display: flex;
+    height: 64px;
+    width: 100%;
+    overflow: hidden;
+    padding: 0 16px;
+    background: #554994;
+    align-items: center;
+}
+
+.logo{
+    flex: 0 0 min-content;
+    margin: 0;
+    cursor: pointer;
+}
+.logo a{
+    text-decoration: none;
+    color: white;
+}
+
+.spacer{
+    flex: 1 1 auto;
+}
