@@ -7,3 +7,5 @@ uvicorn
 loguru
 pandas
 osmnx
+dadata
+osmium

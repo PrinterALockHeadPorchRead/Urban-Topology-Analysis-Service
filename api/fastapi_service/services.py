@@ -5,7 +5,9 @@ from schemas import CityBase, PropertyBase, PointBase, RegionBase
 from shapely.geometry.multilinestring import MultiLineString
 from shapely.geometry.linestring import LineString
 from geopandas.geodataframe import GeoDataFrame
-from typing import List, TYPE_CHECKING, Tuple
+from pandas.core.frame import DataFrame
+from osm_handler import parse_osm
+from typing import List, TYPE_CHECKING
 import pandas as pd
 import osmnx as ox
 import os.path
@@ -76,27 +78,38 @@ async def get_city(city_id: int) -> CityBase:
     city = await database.fetch_one(query)
     return await city_to_scheme(city=city)
 
-def add_info_to_db(city : pd.core.frame.DataFrame):
+def add_info_to_db(city_df : DataFrame):
     with SessionLocal.begin() as session:
-        city_name = city['Город']
-        res = session.query(City).filter(City.city_name==city_name).first()
-        if res is None:
-            id = add_point_to_db(df=city)
-            id = add_property_to_db(df=city, point_id=id)
-            add_city_to_db(df=city, property_id=id)
-            print(f'ADDED: {city_name}')
+        city_name = city_df['Город']
+        city_db = session.query(City).filter(City.city_name==city_name).first()
+        downloaded = False
+        if city_db is None:
+            point_id = add_point_to_db(df=city_df)
+            property_id = add_property_to_db(df=city_df, point_id=point_id)
+            city_id = add_city_to_db(df=city_df, property_id=property_id)
         else:
-            print(f'ALREADY EXISTS: {city_name}')
+            downloaded = city_db.downloaded
 
+        file_path = f'./data/cities_osm/{city_name}.osm'
+        if (not downloaded) and (os.path.exists(file_path)):
+            add_graph_to_db(city_id=city_id, file_path=file_path)
 
-def add_point_to_db(df : pd.core.frame.DataFrame):
+def add_graph_to_db(city_id : int, file_path : str):
+    with SessionLocal.begin() as session:
+        city = session.query(City).get(city_id)
+        ways, nodes = parse_osm(file_path)
+        # add ways and nodes to DB
+        print(f'DOWNLOADED: {city.city_name}')
+        city.downloaded = True
+
+def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
         point = Point(latitude=df['Широта'], longitude=df['Долгота'])
         session.add(point)
         session.flush()
         return point.id
 
-def add_property_to_db(df : pd.core.frame.DataFrame, point_id : int):
+def add_property_to_db(df : DataFrame, point_id : int) -> int:
     with SessionLocal.begin() as session:
         # df['Федеральный округ']
         property = CityProperty(id_center=point_id, population=df['Население'], time_zone=df['Часовой пояс'])
@@ -104,7 +117,7 @@ def add_property_to_db(df : pd.core.frame.DataFrame, point_id : int):
         session.flush()
         return property.id
 
-def add_city_to_db(df : pd.core.frame.DataFrame, property_id : int):
+def add_city_to_db(df : DataFrame, property_id : int) -> int:
     with SessionLocal.begin() as session:
         city = City(city_name=df['Город'], id_property=property_id)
         session.add(city)
@@ -116,7 +129,8 @@ def init_db():
     for row in range(0, cities.shape[0]):
         add_info_to_db(cities.loc[row, :])
 
-async def download_info(city : City, extension : float):
+
+async def download_info(city : City, extension : float) -> bool:
     filePath = f'./data/graphs/{city}.osm'
     if os.path.isfile(filePath):
         print(f'Exists: {filePath}')
@@ -147,7 +161,7 @@ async def download_info(city : City, extension : float):
             print('Invalid city name')
             return False
 
-def delete_info(city : City):
+def delete_info(city : City) -> bool:
     filePath = f'./data/graphs/{city}.osm'
     if os.path.isfile(filePath):
         os.remove(filePath)
@@ -200,40 +214,46 @@ def to_json_array(polygon):
 
     return coordinates_list
 
-def region_to_scheme(regions : GeoDataFrame, ids_list : List[int], depth : int) -> Tuple[List[RegionBase], List[int]]:
+def region_to_schemas(regions : GeoDataFrame, ids_list : List[int], depth : int) -> List[RegionBase]:
     regions_list = [] 
     polygons = regions[regions['osm_id'].isin(ids_list)]
-    ids_list = regions[regions['parents'].str.contains('|'.join(str(x) for x in ids_list), na=False)]['osm_id'].to_list()
-    for index, row in polygons.iterrows():
+    for _, row in polygons.iterrows():
         id = row['osm_id']
         name = row['local_name']
         regions_array = to_json_array(row['geometry'].boundary)
         base = RegionBase(id=id, name=name, depth=depth, regions=regions_array)
-        #print(base)
         regions_list.append(base)
 
-    return regions_list, ids_list
-
-def regions_to_scheme(city : City, regions : GeoDataFrame) -> List[RegionBase]:
-    regions_list = []
-
-    ids_list = regions[regions['local_name']==city.city_name]['osm_id'].to_list()
-    depth = 0
-    while len(ids_list) != 0:
-        new_regions_list, ids_list = region_to_scheme(regions=regions, ids_list=ids_list, depth=depth)
-        regions_list.extend(new_regions_list)
-        depth += 1
-        
     return regions_list
 
-def get_regions(city_id : int, regions : GeoDataFrame) -> List[RegionBase]:
+def children(regions : GeoDataFrame, ids_list : List[int]):
+    children = regions[regions['parents'].str.contains('|'.join(str(x) for x in ids_list), na=False)]
+    return children['osm_id'].to_list()
+
+def find_region_by_depth(city : City, regions : GeoDataFrame, depth : int) -> List[RegionBase]:
+    if depth > 2 or depth < 0:
+        return None
+
+    ids_list = regions[regions['local_name']==city.city_name]['osm_id'].to_list()
+    current_depth = 0
+
+    while len(ids_list) != 0:
+        if current_depth == depth:
+            return region_to_schemas(regions=regions, ids_list=ids_list, depth=depth)
+
+        ids_list = children(regions=regions, ids_list=ids_list)
+        current_depth += 1
+    return None
+
+
+def get_regions(city_id : int, regions : GeoDataFrame, depth : int) -> List[RegionBase]:
     with SessionLocal.begin() as session:
         city = session.query(City).get(city_id)
     # query = CityAsync.select().filter(CityAsync.c.id == city_id)
     # city = database.fetch_one(query)
         if city is None:
             return None
-        return regions_to_scheme(city=city, regions=regions)
+        return find_region_by_depth(city=city, regions=regions, depth=depth)
 
 async def graph_from_poly(id,polygon):
     pass

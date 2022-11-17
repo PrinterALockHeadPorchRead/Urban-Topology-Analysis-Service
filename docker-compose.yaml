@@ -25,8 +25,7 @@ services:
         target: /app/fastapi_service
       - type: bind
         source: ./api/cities_osm
-        target: /app/cities_osm
-
+        target: /app/fastapi_service/data/cities_osm
     restart: always
     depends_on:
       - postgres
@@ -40,7 +39,7 @@ services:
     depends_on:
       - webserver
     ports:
-      - "3000:3000"
+      - "4200:4200"
 
 volumes:     
   pgdata:

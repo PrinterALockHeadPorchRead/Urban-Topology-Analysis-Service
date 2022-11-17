@@ -19,7 +19,7 @@ logger = logs.init()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:4200"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -78,37 +78,18 @@ async def get_cities(
     return cities
 
 
-@app.get("/api/download/city/", response_model=CityBase)
-@logger.catch(exclude=HTTPException)
-async def download_city(
-    city_id: int,
-    extension: float
-): 
-    request = f"GET /api/download/city?city_id={city_id}&extension={extension}/"
-    status_code = 200
-    detail = "OK"
-
-    city = await services.download_city(city_id=city_id, extension=extension)
-    if city is None:
-        status_code = 404
-        detail = "NOT FOUND"
-        logger.error(f"{request} {status_code} {detail}")
-        raise HTTPException(status_code=status_code, detail=detail)
-
-    logger.info(f"{request} {status_code} {detail}")
-    return city
-
 
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
-def city_regions(
-    city_id: int
-):
+async def city_regions(
+    city_id: int,
+    depth: int
+): 
     request = f"GET /api/regions/city?city_id={city_id}/"
     status_code = 200
     detail = "OK"
 
-    regions = services.get_regions(city_id=city_id, regions=regions_df)
+    regions = services.get_regions(city_id=city_id, regions=regions_df, depth=depth)
     if regions is None:
         status_code = 404
         detail = "NOT FOUND"
@@ -117,6 +98,8 @@ def city_regions(
 
     logger.info(f"{request} {status_code} {detail}")
     return regions
+
+
 
 @app.get('/api/city/graph/region/')
 @logger.catch(exclude=HTTPException)
@@ -171,6 +154,8 @@ async def city_graph(
              f"attachment;filename=<{city_id}>.csv"})
 
 
+
+# Useless:
 @app.delete("/api/delete/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
 async def delete_city(
@@ -181,6 +166,20 @@ async def delete_city(
     detail = "OK"
 
     city = await services.delete_city(city_id=city_id)
+
+
+@app.get("/api/download/city/", response_model=CityBase)
+@logger.catch(exclude=HTTPException)
+async def download_city(
+    city_id: int,
+    extension: float
+): 
+    request = f"GET /api/download/city?city_id={city_id}&extension={extension}/"
+    status_code = 200
+    detail = "OK"
+
+    city = await services.download_city(city_id=city_id, extension=extension)
+
     if city is None:
         status_code = 404
         detail = "NOT FOUND"
