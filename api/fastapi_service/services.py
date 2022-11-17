@@ -5,7 +5,9 @@ from schemas import CityBase, PropertyBase, PointBase, RegionBase
 from shapely.geometry.multilinestring import MultiLineString
 from shapely.geometry.linestring import LineString
 from geopandas.geodataframe import GeoDataFrame
-from typing import List, TYPE_CHECKING, Tuple
+from pandas.core.frame import DataFrame
+from osm_handler import parse_osm
+from typing import List, TYPE_CHECKING
 import pandas as pd
 import osmnx as ox
 import os.path
@@ -76,27 +78,38 @@ async def get_city(city_id: int) -> CityBase:
     city = await database.fetch_one(query)
     return await city_to_scheme(city=city)
 
-def add_info_to_db(city : pd.core.frame.DataFrame):
+def add_info_to_db(city_df : DataFrame):
     with SessionLocal.begin() as session:
-        city_name = city['Город']
-        res = session.query(City).filter(City.city_name==city_name).first()
-        if res is None:
-            id = add_point_to_db(df=city)
-            id = add_property_to_db(df=city, point_id=id)
-            add_city_to_db(df=city, property_id=id)
-            print(f'ADDED: {city_name}')
+        city_name = city_df['Город']
+        city_db = session.query(City).filter(City.city_name==city_name).first()
+        downloaded = False
+        if city_db is None:
+            point_id = add_point_to_db(df=city_df)
+            property_id = add_property_to_db(df=city_df, point_id=point_id)
+            city_id = add_city_to_db(df=city_df, property_id=property_id)
         else:
-            print(f'ALREADY EXISTS: {city_name}')
+            downloaded = city_db.downloaded
 
+        file_path = f'./data/cities_osm/{city_name}.osm'
+        if (not downloaded) and (os.path.exists(file_path)):
+            add_graph_to_db(city_id=city_id, file_path=file_path)
 
-def add_point_to_db(df : pd.core.frame.DataFrame):
+def add_graph_to_db(city_id : int, file_path : str):
+    with SessionLocal.begin() as session:
+        city = session.query(City).get(city_id)
+        ways, nodes = parse_osm(file_path)
+        # add ways and nodes to DB
+        print(f'DOWNLOADED: {city.city_name}')
+        city.downloaded = True
+
+def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
         point = Point(latitude=df['Широта'], longitude=df['Долгота'])
         session.add(point)
         session.flush()
         return point.id
 
-def add_property_to_db(df : pd.core.frame.DataFrame, point_id : int):
+def add_property_to_db(df : DataFrame, point_id : int) -> int:
     with SessionLocal.begin() as session:
         # df['Федеральный округ']
         property = CityProperty(id_center=point_id, population=df['Население'], time_zone=df['Часовой пояс'])
@@ -104,7 +117,7 @@ def add_property_to_db(df : pd.core.frame.DataFrame, point_id : int):
         session.flush()
         return property.id
 
-def add_city_to_db(df : pd.core.frame.DataFrame, property_id : int):
+def add_city_to_db(df : DataFrame, property_id : int) -> int:
     with SessionLocal.begin() as session:
         city = City(city_name=df['Город'], id_property=property_id)
         session.add(city)
@@ -116,7 +129,7 @@ def init_db():
     for row in range(0, cities.shape[0]):
         add_info_to_db(cities.loc[row, :])
 
-async def download_info(city : City, extension : float):
+async def download_info(city : City, extension : float) -> bool:
     filePath = f'./data/graphs/{city}.osm'
     if os.path.isfile(filePath):
         print(f'Exists: {filePath}')
@@ -147,7 +160,7 @@ async def download_info(city : City, extension : float):
             print('Invalid city name')
             return False
 
-def delete_info(city : City):
+def delete_info(city : City) -> bool:
     filePath = f'./data/graphs/{city}.osm'
     if os.path.isfile(filePath):
         os.remove(filePath)

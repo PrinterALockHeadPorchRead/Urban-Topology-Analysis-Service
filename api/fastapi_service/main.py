@@ -78,27 +78,6 @@ async def get_cities(
     return cities
 
 
-@app.get("/api/download/city/", response_model=CityBase)
-@logger.catch(exclude=HTTPException)
-async def download_city(
-    city_id: int,
-    extension: float
-): 
-    request = f"GET /api/download/city?city_id={city_id}&extension={extension}/"
-    status_code = 200
-    detail = "OK"
-
-    city = await services.download_city(city_id=city_id, extension=extension)
-    if city is None:
-        status_code = 404
-        detail = "NOT FOUND"
-        logger.error(f"{request} {status_code} {detail}")
-        raise HTTPException(status_code=status_code, detail=detail)
-
-    logger.info(f"{request} {status_code} {detail}")
-    return city
-
-
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
 async def city_regions(
@@ -173,6 +152,9 @@ async def city_graph(
              f"attachment;filename=<{city_id}>.csv"})
 
 
+
+# Useless:
+
 @app.delete("/api/delete/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
 async def delete_city(
@@ -183,6 +165,26 @@ async def delete_city(
     detail = "OK"
 
     city = await services.delete_city(city_id=city_id)
+    if city is None:
+        status_code = 404
+        detail = "NOT FOUND"
+        logger.error(f"{request} {status_code} {detail}")
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    logger.info(f"{request} {status_code} {detail}")
+    return city
+
+@app.get("/api/download/city/", response_model=CityBase)
+@logger.catch(exclude=HTTPException)
+async def download_city(
+    city_id: int,
+    extension: float
+): 
+    request = f"GET /api/download/city?city_id={city_id}&extension={extension}/"
+    status_code = 200
+    detail = "OK"
+
+    city = await services.download_city(city_id=city_id, extension=extension)
     if city is None:
         status_code = 404
         detail = "NOT FOUND"

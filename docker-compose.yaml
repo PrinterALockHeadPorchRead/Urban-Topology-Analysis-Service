@@ -25,7 +25,7 @@ services:
         target: /app/fastapi_service
       - type: bind
         source: ./api/cities_osm
-        target: /app/cities_osm
+        target: /app/fastapi_service/data/cities_osm
 
     restart: always
     depends_on:
