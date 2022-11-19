@@ -65,9 +65,6 @@ def parse_osm(osm_file_path) -> Tuple[dict, dict]:
         nodes.apply_file(osm_file_path, locations=False)
     except RuntimeError:
         pass
-    
-    nodes_ids = set(nodes.nodes_tags.keys())
-    ways_ids = set(ways.used_nodes_ids.keys())
 
     return ways.ways_tags, nodes.nodes_tags
 
