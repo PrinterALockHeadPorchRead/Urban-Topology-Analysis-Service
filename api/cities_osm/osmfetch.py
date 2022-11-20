@@ -63,7 +63,4 @@ def download_city(city_name : str) -> str:
         return osmfetch(city_name, [south, west, north, east], filePath, extension)
     except ValueError:
         print('Invalid city name')
-        return None
-
-print(download_city('Геленджик'))
-  
+        return None  

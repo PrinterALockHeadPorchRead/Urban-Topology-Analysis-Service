@@ -7,11 +7,15 @@ from os import getenv
 from schemas import CityBase, RegionBase
 from database import database, engine, metadata
 
+from database import EdgesAsync, CityAsync
+
 import pandas as pd
+import asyncio
 
 import geopandas as gpd
 import services
 import logs 
+
 
 regions_df = gpd.read_file('./data/regions.json', driver='GeoJSON')
 app = FastAPI()
@@ -25,21 +29,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if __name__ == "__main__":
-    services.add_tables() 
-    services.init_db()
-    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
-
-metadata.create_all(engine)
-
 @app.on_event("startup")
 async def startup():
     await database.connect()
+    services.init_db()
 
 
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
+
+if __name__ == "__main__":
+    metadata.create_all(engine)
+    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
+    #services.add_tables() 
+
 
 
 @app.get("/api/city/", response_model=CityBase)
