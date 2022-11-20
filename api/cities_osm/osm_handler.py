@@ -1,7 +1,6 @@
 # from street_name_parser import parse_name
 from typing import Tuple
 import osmium as o
-import traceback
 
 
 required_ways_tags = {'highway', 'junction', 'lit', 'surface', 
@@ -23,17 +22,25 @@ class HighwayWaysHandler(o.SimpleHandler):
 
     def way(self, w):
         if ('highway' in w.tags) and (w.tags.get('highway') in self.required_road_types):
-            self.ways_tags[w.id] = {tag.k : tag.v for tag in w.tags}
+            lats = {53.722428, 53.723866, 53.714775, 53.714498}
+            lons = {91.441418, 91.464862, 91.467865, 91.445189}
+
+            for i in range(0, len(w.nodes)):
+                if not ((w.nodes[i].lat > min(lats)) and (w.nodes[i].lat < max(lats)) and (w.nodes[i].lon > min(lons)) and (w.nodes[i].lon < max(lons))):
+                    return
+
             # if not 'name' in w.tags:
             #     self.ways_tags[w.id]['name'] = parse_name(w.nodes)
            
             graph = []
             for i in range(0, len(w.nodes) - 1):
-                graph.append([int(w.nodes[i].ref), int(w.nodes[i+1].ref)])
                 self.used_nodes_ids[int(w.nodes[i].ref)] = {'lat':w.nodes[i].lat, 'lon':w.nodes[i].lon}
+                graph.append([int(w.nodes[i].ref), int(w.nodes[i+1].ref)])
 
             i = len(w.nodes) - 1
             self.used_nodes_ids[int(w.nodes[i].ref)] = {'lat':w.nodes[i].lat, 'lon':w.nodes[i].lon}
+    
+            self.ways_tags[w.id] = {tag.k : tag.v for tag in w.tags}
             self.ways_tags[w.id]['graph'] = graph
                      
 
@@ -59,14 +66,54 @@ def parse_osm(osm_file_path) -> Tuple[dict, dict]:
         ways.apply_file(osm_file_path, locations=False)
     except RuntimeError:
         pass
-   
+
     nodes = HighwayNodesHandler(ways.used_nodes_ids)
     try:
-        nodes.apply_file(osm_file_path, locations=False)
+        nodes.apply_file(osm_file_path, locations=True)
     except RuntimeError:
         pass
 
     return ways.ways_tags, nodes.nodes_tags
 
 
-w, n = parse_osm('./Абакан.osm')
+# w, n = parse_osm('./Абакан.osm')
+
+import pandas as pd
+
+# ids = []
+# lat = []
+# lon = []
+# for point_id, coords in n.items():
+#     ids.append(point_id)
+#     lon.append(coords['lon'])
+#     lat.append(coords['lat'])
+
+# d = {'node_id': ids, 'lat': lat, 'lon': lon}
+# df = pd.DataFrame(data=d)
+# df.to_csv('nodes.csv', index=False)
+
+# from_id = []
+# to_id = []
+# name = []
+# for id, info in w.items():
+#     for edge in info['graph']:
+#         from_id.append(edge[0])
+#         to_id.append(edge[1])
+#         if 'name' in info:
+#             name.append(info['name'])
+#         else:
+#             name.append('-')
+
+# d = {'from': from_id, 'to': to_id, 'street_name': name}
+# df = pd.DataFrame(data=d)
+# df.to_csv('graph.csv', index=False)
+
+df_graph = pd.read_csv('./graph.csv')
+df_nodes = pd.read_csv('./nodes.csv')
+
+
+graph_ids = set(df_graph['to'])
+
+nodes_ids = set(df_nodes['node_id'])
+
+print(graph_ids.difference(nodes_ids))

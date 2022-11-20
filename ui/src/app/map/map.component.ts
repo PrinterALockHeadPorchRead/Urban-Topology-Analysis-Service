@@ -170,6 +170,9 @@ export class MapComponent implements OnInit {
   drawDistricts(depth: districtLevels){
 
     this.districts.clearLayers();
+
+    if(!this.cityFeatures || !this.cityFeatures[depth]) return;
+
     this.cityFeatures[depth].map(d => {
       this.drawGeoJson({
         type: "Feature",

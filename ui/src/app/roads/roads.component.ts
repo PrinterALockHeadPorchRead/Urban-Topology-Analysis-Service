@@ -1,7 +1,9 @@
 import { ChangeDetectorRef, Component, Input, OnInit } from '@angular/core';
-import * as L from 'leaflet';
 import { SearchService } from '../services/search.service';
-var osmtogeojson = require('osmtogeojson');
+import { GraphData } from '../services/graph-data.service';
+import iwanthue from 'iwanthue';
+import { saveText } from '../graph/saveAsPNG';
+import * as L from 'leaflet';
 import 'leaflet-easyprint';
 
 @Component({
@@ -10,25 +12,29 @@ import 'leaflet-easyprint';
   styleUrls: ['./roads.component.css']
 })
 export class RoadsComponent implements OnInit {
-  private _bounds?: L.LatLngBounds;
-  @Input() set bounds(val: L.LatLngBounds | undefined){
-    this._bounds = val;
-    if(val && this.map) this.updateRoads(this.map, val);
-  };
-  get bounds(){ return this._bounds };
+  markerIcon = L.divIcon({className: 'roadPoint'});
+  private _gd: GraphData | undefined;
+  @Input() set graphData(val: GraphData | undefined){
+    this._gd = val;
+    if(val) this.updateRoads(val);
+  }
+  get graphData(){ return this._gd }
 
   loading: boolean = false;
   printControl: any;
-  gds?: L.GeoJSON;
+  // gds?: L.GeoJSON;
+
+  roads = new L.FeatureGroup([]);
+
   map?: L.Map;
   options: L.MapOptions = {
     layers: [
-
+      this.roads
     ] as L.Layer[],
+    center: [55.754527, 37.619509],
+    zoom: 10,
   };
   constructor(
-    private searchService: SearchService,
-    private cdRef: ChangeDetectorRef
   ) { }
 
   ngOnInit(): void {
@@ -37,45 +43,40 @@ export class RoadsComponent implements OnInit {
   onMapReady(map: L.Map){
     this.map = map;
     this.setTools(map);
-    if(this.bounds){
-      this.updateRoads(map, this.bounds)
-    }
+    if(this.graphData) this.updateRoads(this.graphData);
   }
 
-  updateRoads(map: L.Map, bounds: L.LatLngBounds){
-    this.loading = true;
-    this.gds?.clearLayers();
-    this.searchService.getRoadsOsm({
-      s: bounds.getSouth(),
-      w: bounds.getWest(),
-      n: bounds.getNorth(),
-      e: bounds.getEast()
-    }).subscribe((res: any) => {
-      this.loading = false;
-      this.cdRef.detectChanges();
-      this.gds = L.geoJSON(osmtogeojson(res)).addTo(map);
-      map.fitBounds(this.gds.getBounds());
-      map.setMaxBounds(map.getBounds());
-      map.setMinZoom(map.getZoom());
-      this.gds.setStyle({
-        color: 'black'
-      })
+  updateRoads(gd: GraphData){
+    if(!this.map) return;
+    this.roads.clearLayers();
+
+    gd.nodes.forEach(node => {
+      L.marker([ Number(node.lat), Number(node.lon)], {icon: this.markerIcon}).addTo(this.roads);
     })
+
+    const pallete = iwanthue(gd.edges.length, {seed: 'someFunnySeed'});
+    gd.edges.forEach((edge, index) => {
+      const fromNode = gd.nodes.find(n => n.node_id == edge.from);
+      const toNode = gd.nodes.find(n => n.node_id == edge.to);
+      if(!(fromNode && toNode)) return;
+
+      L.polyline([
+        [Number(fromNode.lat), Number(fromNode.lon)], 
+        [Number(toNode.lat), Number(toNode.lon)]
+      ], {color: pallete[index], weight: 7}).bindTooltip(edge.street_name).addTo(this.roads);
+    })
+    
+    this.map.fitBounds(this.roads.getBounds());
   }
 
   setTools(map: L.Map){
-    this.printControl = (L as any).easyPrint({
-      title: 'Print Me',
-      position: 'bottomleft',
-      sizeModes: ['Current'],
-      filename: 'export.png',
-      exportOnly: true,
-      tileWait: 4000,
-      hidden: true,
-      hideControlContainer: true
-    }).addTo(map);
-
-    const exportMap = ExportMap(() => this.printControl.printMap('CurrentSize'));
+    const exportMap = ExportMap(() => {
+      saveText(
+        'export.svg',
+        (document.getElementsByClassName('leaflet-overlay-pane')[1].lastChild as any).outerHTML,
+        'image/svg+xml'
+      )
+    });
     new exportMap().addTo(map);
   }
 

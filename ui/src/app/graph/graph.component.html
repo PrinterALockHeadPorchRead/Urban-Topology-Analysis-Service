@@ -1,3 +1,4 @@
+<script src="../src/renderers/sigma.renderers.svg.js"></script>
 <div class="wrapper">
     <div #sigmaContainer class="sigmaContainer"></div>
     <div class="controls">
@@ -15,12 +16,19 @@
             <label for="labels-threshold">Labels threshold</label>
         </div>
         <div class="row">
-            <button class="icon" id="save-as-png" (click)="onSaveAsPng()">
+            <!-- <button class="icon" id="save-as-png" (click)="onSaveAs('png')">
                 <span class="material-symbols-outlined">
                     save_alt
                 </span>
             </button>
-            <label for="save-as-png">Save as PNG</label>
+            <label for="save-as-png">Save as PNG</label> -->
+
+            <button class="icon" id="save-as-svg" (click)="onSaveAs('svg')">
+                <span class="material-symbols-outlined">
+                    save_alt
+                </span>
+            </button>
+            <label for="save-as-svg">Save as SVG</label>
         </div>
     </div>
 </div>

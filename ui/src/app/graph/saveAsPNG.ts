@@ -1,6 +1,6 @@
 import Sigma from "sigma";
 import FileSaver from "file-saver";
-
+import * as svg from 'svgcanvas';
 /**
  * There is a bug I can't find sources about, that makes it impossible to render
  * WebGL canvases using `#drawImage` as long as they appear onscreen. There are
@@ -13,7 +13,15 @@ import FileSaver from "file-saver";
  *    settings, graph, camera...), use it and kill it
  * This exemple uses this last solution.
  */
-export default async function saveAsPNG(renderer: Sigma, inputLayers?: string[]) {
+
+
+ type SaveTextType = 'application/xml' | 'application/json' | 'image/svg+xml';
+
+ export function saveText(name: string, text: string, type: SaveTextType) {
+  const blob = new Blob([text], {type: `${type};charset=utf-8`});
+  FileSaver.saveAs(blob, name);
+}
+export default async function saveAs( type: 'png' | 'svg', renderer: Sigma, inputLayers?: string[]) {
   const { width, height } = renderer.getDimensions();
 
   // This pixel ratio is here to deal with retina displays.
@@ -42,7 +50,14 @@ export default async function saveAsPNG(renderer: Sigma, inputLayers?: string[])
   const canvas = document.createElement("CANVAS") as HTMLCanvasElement;
   canvas.setAttribute("width", width * pixelRatio + "");
   canvas.setAttribute("height", height * pixelRatio + "");
-  const ctx = canvas.getContext("2d") as CanvasRenderingContext2D;
+  
+  let ctx: CanvasRenderingContext2D | typeof svg.Context;
+  switch (type){
+    case 'png': {ctx = canvas.getContext("2d") as CanvasRenderingContext2D; break;}
+    case 'svg': {ctx = new svg.Context(width * pixelRatio, height * pixelRatio); break; }
+  }
+
+ 
 
   // Draw a white background first:
   ctx.fillStyle = "#fff";
@@ -65,12 +80,20 @@ export default async function saveAsPNG(renderer: Sigma, inputLayers?: string[])
     );
   });
 
+  if(type == 'svg') {
+    saveText('graph.svg', ctx.getSerializedSvg() , 'image/svg+xml');
+    tmpRenderer.kill();
+    tmpRoot.remove();
+    return;
+  }
+
+
   // Save the canvas as a PNG image:
   canvas.toBlob((blob) => {
     if (blob) FileSaver.saveAs(blob, "graph.png");
-
-    // Cleanup:
-    tmpRenderer.kill();
-    tmpRoot.remove();
   }, "image/png");
+  
+  // Cleanup:
+  tmpRenderer.kill();
+  tmpRoot.remove();
 }

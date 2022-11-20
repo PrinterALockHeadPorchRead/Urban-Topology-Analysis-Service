@@ -55,6 +55,8 @@ def download_city(city_name : str) -> str:
     try:
         city_info = ox.geocode_to_gdf(query)
 
+        city_info.plot()
+
         north = city_info.iloc[0]['bbox_north']  
         south = city_info.iloc[0]['bbox_south']
         east = city_info.iloc[0]['bbox_east'] 
@@ -65,4 +67,4 @@ def download_city(city_name : str) -> str:
         print('Invalid city name')
         return None
 
-download_city('Севастополь')
+download_city('Санкт-Петербург')

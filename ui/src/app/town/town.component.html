@@ -1,6 +1,6 @@
 <div class="wrapper">
-    <a name="map"></a>
     <div class="mapWrapper">
+        <a name="map"></a>
         <ng-container *ngIf="town">
             <app-map 
                 class="map" 
@@ -11,23 +11,17 @@
         </ng-container>
     </div>
     <div class="graphWrapper">
-        <div  style="height: 100vh">
-            <a name="graph"></a>
-            <app-graph *ngIf="graph" #graphComponent [name]="graphName"></app-graph>
-        </div>
-        <div style="height: 100vh">
-            <a name="roads"></a>
-            <app-roads *ngIf="roadBounds" [bounds]="roadBounds"></app-roads>
-        </div>
+        <a name="graph"></a>
+        <app-graph *ngIf="graphData" [graphData]="graphData" [name]="graphName"></app-graph>
+    </div>
+    <div class="roadsWrapper">
+        <a name="roads"></a>
+        <app-roads *ngIf="graphData" [graphData]="graphData" ></app-roads>
+    </div>
+
+    <div class="nav">
+        <button title="Map" [ngClass]="{'active': section == 'map'}" (click)="section = 'map'"></button>
+        <button title="Graph" [ngClass]="{'active': section == 'graph'}" (click)="section = 'graph'" [disabled]="!graphData"></button>
+        <button title="Roads" [ngClass]="{'active': section == 'roads'}" (click)="section = 'roads'" [disabled]="!graphData"></button>
     </div>
 </div>
-<button *ngIf="graph" class="goDown" (click)="goDown()" title="To graphs" >
-    <span class="material-symbols-outlined">
-        arrow_downward
-    </span>
-</button>
-<button *ngIf="graph" class="goUp" (click)="goUp()" title="To map" >
-    <span class="material-symbols-outlined">
-        arrow_upward
-    </span>
-</button>

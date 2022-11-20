@@ -74,6 +74,7 @@
     border: 1px solid dimgrey;
     border-radius: 2px;
     cursor: pointer;
+    margin-left: 1em;
 }
 
 .input button.icon{
