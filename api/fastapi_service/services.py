@@ -136,6 +136,7 @@ def add_graph_to_db(city_id : int, file_path : str):
                 pass
             graph = ways[key].pop('graph')
             way_dict = ways[key]
+            oneway=False
             if "oneway" in way_dict.keys(): # доделать oneway
                 oneway=True
             for edge in graph:
@@ -162,7 +163,7 @@ def add_graph_to_db(city_id : int, file_path : str):
                 else:
                     try:
                         query = PropertyAsync.insert().values(property=f"{key2}")
-                        conn.execute(query).inserted_primary_key[0]
+                        prop_id = conn.execute(query).inserted_primary_key[0]
                         prop_id = int(prop_id)
                     except:
                         pass
@@ -326,3 +327,17 @@ async def graph_from_poly(id,polygon):
 
 async def graph_from_id(city_id, region_id):
     pass
+
+
+query_for_citypoints_v1 = """
+SELECT "Points".id, "Points".longitude, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110)AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id;
+"""
+
+query_for_cityp_bbox_v1 = """
+SELECT "Points".id, "Points".longitude, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110)AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id WHERE "Points".longitude < 91.4 and "Points".longitude > 91.395 and "Points".latitude > 53.75 and "Points".latitude < 53.77;
+"""
+
+query_for_edges_wnames_v1="""
+SELECT id, id_src, id_dist, value FROM (SELECT id, id_src, id_dist, id_way FROM "Edges" JOIN (SELECT
+"Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) e JOIN (SELECT id_way, value FROM "WayProperties" WHERE id_property = 3) p ON e.id_way = p.id_way;
+"""
