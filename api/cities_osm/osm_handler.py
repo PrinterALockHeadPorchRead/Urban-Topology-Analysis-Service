@@ -22,13 +22,6 @@ class HighwayWaysHandler(o.SimpleHandler):
 
     def way(self, w):
         if ('highway' in w.tags) and (w.tags.get('highway') in self.required_road_types):
-            lats = {53.722428, 53.723866, 53.714775, 53.714498}
-            lons = {91.441418, 91.464862, 91.467865, 91.445189}
-
-            for i in range(0, len(w.nodes)):
-                if not ((w.nodes[i].lat > min(lats)) and (w.nodes[i].lat < max(lats)) and (w.nodes[i].lon > min(lons)) and (w.nodes[i].lon < max(lons))):
-                    return
-
             # if not 'name' in w.tags:
             #     self.ways_tags[w.id]['name'] = parse_name(w.nodes)
            
@@ -78,7 +71,7 @@ def parse_osm(osm_file_path) -> Tuple[dict, dict]:
 
 # w, n = parse_osm('./Абакан.osm')
 
-import pandas as pd
+# import pandas as pd
 
 # ids = []
 # lat = []
@@ -108,12 +101,12 @@ import pandas as pd
 # df = pd.DataFrame(data=d)
 # df.to_csv('graph.csv', index=False)
 
-df_graph = pd.read_csv('./graph.csv')
-df_nodes = pd.read_csv('./nodes.csv')
+# df_graph = pd.read_csv('./graph.csv')
+# df_nodes = pd.read_csv('./nodes.csv')
 
 
-graph_ids = set(df_graph['to'])
+# graph_ids = set(df_graph['from'])
 
-nodes_ids = set(df_nodes['node_id'])
+# nodes_ids = set(df_nodes['node_id'])
 
-print(graph_ids.difference(nodes_ids))
+# print(graph_ids.difference(nodes_ids))
