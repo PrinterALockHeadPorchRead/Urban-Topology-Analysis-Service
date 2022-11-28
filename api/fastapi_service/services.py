@@ -4,13 +4,15 @@ from database import CityAsync, CityPropertyAsync, PointAsync
 from schemas import CityBase, PropertyBase, PointBase, RegionBase
 from shapely.geometry.multilinestring import MultiLineString
 from shapely.geometry.linestring import LineString
+from shapely.geometry.polygon import Polygon
+from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
 from typing import List, TYPE_CHECKING
-import pandas as pd
 import osmnx as ox
 import os.path
+import ast
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -124,10 +126,9 @@ def add_city_to_db(df : DataFrame, property_id : int) -> int:
         session.flush()
         return city.id
 
-def init_db():
-    cities = pd.read_csv('./data/cities.csv')
-    for row in range(0, cities.shape[0]):
-        add_info_to_db(cities.loc[row, :])
+def init_db(cities_info : DataFrame):
+    for row in range(0, cities_info.shape[0]):
+        add_info_to_db(cities_info.loc[row, :])
 
 async def download_info(city : City, extension : float) -> bool:
     filePath = f'./data/graphs/{city}.osm'
@@ -213,50 +214,71 @@ def to_json_array(polygon):
 
     return coordinates_list
 
-def region_to_schemas(regions : GeoDataFrame, ids_list : List[int], depth : int) -> List[RegionBase]:
+def region_to_schemas(regions : GeoDataFrame, ids_list : List[int], admin_level : int) -> List[RegionBase]:
     regions_list = [] 
     polygons = regions[regions['osm_id'].isin(ids_list)]
     for _, row in polygons.iterrows():
         id = row['osm_id']
         name = row['local_name']
         regions_array = to_json_array(row['geometry'].boundary)
-        base = RegionBase(id=id, name=name, depth=depth, regions=regions_array)
+        base = RegionBase(id=id, name=name, admin_level=admin_level, regions=regions_array)
         regions_list.append(base)
 
     return regions_list
 
-def children(regions : GeoDataFrame, ids_list : List[int]):
-    children = regions[regions['parents'].str.contains('|'.join(str(x) for x in ids_list), na=False)]
-    return children['osm_id'].to_list()
+def children(ids_list : List[int], admin_level : int, regions : GeoDataFrame):
+    area = regions[regions['parents'].str.contains('|'.join(str(x) for x in ids_list), na=False)]
+    area = area[area['admin_level']==admin_level]
+    lst = area['osm_id'].to_list()
+    if len(lst) == 0:
+        return ids_list, False
+    return lst, True
 
-def find_region_by_depth(city : City, regions : GeoDataFrame, depth : int) -> List[RegionBase]:
-    if depth > 2 or depth < 0:
-        return None
+def get_admin_levels(city : City, regions : GeoDataFrame, cities : DataFrame) -> List[RegionBase]:
+    regions_list = []
 
-    ids_list = regions[regions['local_name']==city.city_name]['osm_id'].to_list()
-    current_depth = 0
+    levels_str = cities[cities['Город'] == city.city_name]['admin_levels'].values[0]
+    levels = ast.literal_eval(levels_str)
 
-    while len(ids_list) != 0:
-        if current_depth == depth:
-            return region_to_schemas(regions=regions, ids_list=ids_list, depth=depth)
+    info = regions[regions['local_name']==city.city_name].sort_values(by='admin_level')
+    ids_list = [info['osm_id'].to_list()[0]]
 
-        ids_list = children(regions=regions, ids_list=ids_list)
-        current_depth += 1
+    schemas = region_to_schemas(regions=regions, ids_list=ids_list, admin_level=levels[0])
+    regions_list.extend(schemas)
+    for level in levels:
+        ids_list, data_valid = children(ids_list=ids_list, admin_level=level, regions=regions)
+        if data_valid:
+            schemas = region_to_schemas(regions=regions, ids_list=ids_list, admin_level=level)
+            regions_list.extend(schemas)
 
-    return None
+    return regions_list
 
 
-def get_regions(city_id : int, regions : GeoDataFrame, depth : int) -> List[RegionBase]:
+def get_regions(city_id : int, regions : GeoDataFrame, cities : DataFrame) -> List[RegionBase]:
     with SessionLocal.begin() as session:
         city = session.query(City).get(city_id)
     # query = CityAsync.select().filter(CityAsync.c.id == city_id)
     # city = database.fetch_one(query)
         if city is None:
             return None
-        return find_region_by_depth(city=city, regions=regions, depth=depth)
+        return get_admin_levels(city=city, regions=regions, cities=cities)
 
-async def graph_from_poly(id,polygon):
-    pass
+async def graph_from_poly(city_id, polygon):
+    print(polygon.bounds) #min_lon, min_lat, max_lon, max_lat
+    return None
 
-async def graph_from_id(city_id, region_id):
-    pass
+def list_to_polygon(polygons : List[List[List[float]]]):
+    return unary_union([Polygon(polygon) for polygon in polygons])
+
+def polygons_from_region(regions_ids : List[int], regions : GeoDataFrame):
+    if len(regions_ids) == 0:
+        return None
+    polygons = regions[regions['osm_id'].isin(regions_ids)]
+    return unary_union([geom for geom in polygons['geometry'].values])
+
+async def graph_from_ids(city_id : int, regions_ids : List[int], regions : GeoDataFrame):
+    polygon = polygons_from_region(regions_ids=regions_ids, regions=regions)
+    if polygon == None:
+        return None
+    return graph_from_poly(city_id=city_id, polygon=polygon)
+    

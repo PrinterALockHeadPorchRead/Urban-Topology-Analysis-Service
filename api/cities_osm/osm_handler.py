@@ -1,15 +1,15 @@
 # from street_name_parser import parse_name
 from typing import Tuple
 import osmium as o
+import pandas as pd
 
 
-required_ways_tags = {'highway', 'junction', 'lit', 'surface', 
-                      'maxspeed:type', 'tunnel', 'bridge', 'oneway', 
-                      'living_street', 'lanes', 'maxspeed', 'name'}
-required_point_tags = {'population', 'traffic_signals', 'crossing', 
+required_ways_tags = ['way_id', 'name', 'maxspeed', 'highway', 'junction', 'lit', 'surface', 
+                      'maxspeed:type', 'tunnel', 'bridge', 'oneway', 'living_street', 'lanes']
+required_point_tags = ['node_id', 'name', 'traffic_signals', 'crossing', 'traffic_sign', 
                        'button_operated', 'traffic_calming', 'highway', 
-                       'traffic_sign', 'admin_level', 'railway', 'population:date', 
-                       'name', 'public_transport', 'motorcar'}
+                       'railway', 'public_transport', 'motorcar', 
+                       'admin_level', 'population', 'population:date']
 
 class HighwayWaysHandler(o.SimpleHandler):
     def __init__(self):
@@ -69,44 +69,49 @@ def parse_osm(osm_file_path) -> Tuple[dict, dict]:
     return ways.ways_tags, nodes.nodes_tags
 
 
-# w, n = parse_osm('./Абакан.osm')
+w, n = parse_osm('./Абакан.osm')
 
-# import pandas as pd
+ways_df = pd.DataFrame(columns=required_ways_tags)
 
-# ids = []
-# lat = []
-# lon = []
-# for point_id, coords in n.items():
-#     ids.append(point_id)
-#     lon.append(coords['lon'])
-#     lat.append(coords['lat'])
+print(ways_df.head())
 
-# d = {'node_id': ids, 'lat': lat, 'lon': lon}
-# df = pd.DataFrame(data=d)
-# df.to_csv('nodes.csv', index=False)
 
-# from_id = []
-# to_id = []
-# name = []
-# for id, info in w.items():
-#     for edge in info['graph']:
-#         from_id.append(edge[0])
-#         to_id.append(edge[1])
-#         if 'name' in info:
-#             name.append(info['name'])
-#         else:
-#             name.append('-')
 
-# d = {'from': from_id, 'to': to_id, 'street_name': name}
-# df = pd.DataFrame(data=d)
-# df.to_csv('graph.csv', index=False)
+
+def to_csv(w, n):
+    ids = []
+    lat = []
+    lon = []
+    for point_id, coords in n.items():
+        ids.append(point_id)
+        lon.append(coords['lon'])
+        lat.append(coords['lat'])
+
+    d = {'node_id': ids, 'lat': lat, 'lon': lon}
+    df = pd.DataFrame(data=d)
+    df.to_csv('nodes.csv', index=False)
+
+    from_id = []
+    to_id = []
+    name = []
+    for id, info in w.items():
+        for edge in info['graph']:
+            from_id.append(edge[0])
+            to_id.append(edge[1])
+            if 'name' in info:
+                name.append(info['name'])
+            else:
+                name.append('-')
+
+    d = {'from': from_id, 'to': to_id, 'street_name': name}
+    df = pd.DataFrame(data=d)
+    df.to_csv('graph.csv', index=False)
+
 
 # df_graph = pd.read_csv('./graph.csv')
 # df_nodes = pd.read_csv('./nodes.csv')
 
-
 # graph_ids = set(df_graph['from'])
-
 # nodes_ids = set(df_nodes['node_id'])
 
 # print(graph_ids.difference(nodes_ids))

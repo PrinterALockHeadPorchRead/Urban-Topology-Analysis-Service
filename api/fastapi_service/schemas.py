@@ -21,7 +21,7 @@ class CityBase(BaseModel):
 
 class RegionBase(BaseModel):
     id : int
-    depth : int
+    admin_level : int
     name : str
     regions : List[List[List[float]]]
 
