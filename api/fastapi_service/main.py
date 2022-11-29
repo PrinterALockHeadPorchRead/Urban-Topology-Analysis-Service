@@ -7,8 +7,6 @@ from os import getenv
 from schemas import CityBase, RegionBase
 from database import database, engine, metadata
 
-from database import EdgesAsync, CityAsync
-
 import pandas as pd
 import asyncio
 
@@ -115,16 +113,18 @@ async def city_graph(
     status_code = 200
     detail = "OK"
 
-    graph = await services.graph_from_id(city_id = city_id, region_id=region_id)
-    if graph is None:
+    points, edges = await services.graph_from_id(city_id = city_id, region_id=region_id)
+    if points is None or edges is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
+    #print(graph)
 
-    response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+    response = pd.DataFrame(points).to_csv(sep=',', index=False)  # нужно заменить columns на названия
+               # pd.DataFrame(points).to_csv(sep=',', index=False) # нужно заменить columns на названия
 
-    return StreamingResponse(
+    return StreamingResponse( #2 файла не отсылаются, исправить
     iter([response]),
     media_type='text/csv',
     headers={"Content-Disposition":
@@ -133,7 +133,7 @@ async def city_graph(
 
 @app.post('/api/city/graph/bbox/{city_id}/')
 @logger.catch(exclude=HTTPException)
-async def city_graph(
+async def city_graph_poly(
     city_id: int,
     polygon: List[RegionBase],
 ):
@@ -141,7 +141,7 @@ async def city_graph(
     status_code = 200
     detail = "OK"
 
-    graph = await services.graph_from_poly(id = city_id, polygon = polygon)
+    graph = await services.graph_from_poly(city_id = city_id, polygon = polygon)
     
     if graph is None:
         status_code = 404
@@ -151,7 +151,7 @@ async def city_graph(
 
     response = pd.DataFrame(graph).to_csv(sep=',', index=False)
 
-    return StreamingResponse(
+    return StreamingResponse( #2 файла не отсылаются, исправить
     iter([response]),
     media_type='text/csv',
     headers={"Content-Disposition":

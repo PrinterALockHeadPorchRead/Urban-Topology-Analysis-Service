@@ -11,7 +11,7 @@ from typing import List, TYPE_CHECKING
 import pandas as pd
 import osmnx as ox
 import os.path
-from sqlalchemy import update
+from sqlalchemy import update, text
 
 
 
@@ -137,7 +137,7 @@ def add_graph_to_db(city_id : int, file_path : str):
             graph = ways[key].pop('graph')
             way_dict = ways[key]
             oneway=False
-            if "oneway" in way_dict.keys(): # доделать oneway
+            if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
                 oneway=True
             for edge in graph:
                 try:
@@ -322,11 +322,77 @@ def get_regions(city_id : int, regions : GeoDataFrame, depth : int) -> List[Regi
             return None
         return find_region_by_depth(city=city, regions=regions, depth=depth)
 
-async def graph_from_poly(id,polygon):
+
+def point_obj_to_list(db_record) -> List:
+    return [db_record.id, db_record.longitude, db_record.latitude]
+
+def edge_obj_to_list(db_record) -> List:
+    return [db_record.id, db_record.id_src, db_record.id_dist, db_record.value]
+
+async def graph_from_id(city_id, region_id): #реализован механизм доставания точек и ребер города по id
+    q = CityAsync.select().where(CityAsync.c.id == city_id)
+    city = await database.fetch_one(q)
+    if city is None or not city.downloaded: # add region check
+        return None
+    query = text(
+        f"""
+        SELECT "Points".id, "Points".longitude, "Points".latitude
+        FROM (SELECT id_src FROM "Edges" JOIN 
+        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p
+        JOIN "Points" ON p.id_src = "Points".id;
+        """)
+    res = await database.fetch_all(query)
+
+    points = list(map(point_obj_to_list,res)) # [...[id, longitude, latitude]...]
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
+    prop = await database.fetch_one(q)
+    prop_id = prop.id
+    query = text(
+        f""" SELECT id, id_src, id_dist, value FROM 
+        (SELECT id, id_src, id_dist, id_way FROM "Edges" JOIN 
+        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) e JOIN 
+        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) p ON e.id_way = p.id_way;
+        """)
+    res = await database.fetch_all(query)
+    edges = list(map(point_obj_to_list,res)) # [...[id, from, to, name]...]
+
+    return points, edges
+
+def bbox_from_poly():
     pass
 
-async def graph_from_id(city_id, region_id):
-    pass
+async def graph_from_poly(city_id,polygon):
+    bbox = bbox_from_poly(polygon)
+    q = CityAsync.select().where(CityAsync.c.id == city_id)
+    city = await database.fetch_one(q)
+    if city is None or not city.downloaded:
+        return None
+    query = text(
+        f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
+        (SELECT id_src FROM "Edges" JOIN 
+        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
+        WHERE "Points".longitude < {bbox['?']} and "Points".longitude > {bbox['?']} and "Points".latitude > {bbox['?']} and "Points".latitude < {bbox['?']};
+        """)
+    res = await database.fetch_all(query)
+    points = list(map(point_obj_to_list,res)) # [...[id, longitude, latitude]...]
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
+    prop = await database.fetch_one(q)
+    prop_id = prop.id
+    query = text(
+        f"""SELECT id, id_src, id_dist, value FROM 
+        (SELECT id, id_src, id_dist, value FROM "Edges" JOIN 
+        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
+        (SELECT "Points".id as point_id FROM 
+        (SELECT id_src FROM "Edges" JOIN 
+        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
+        p.id_src = "Points".id WHERE "Points".longitude < {bbox['?']} and "Points".longitude > {bbox['?']} and "Points".latitude > {bbox['?']} and "Points".latitude < {bbox['?']}) AS b ON a.id_src = b.point_id; 
+        """)
+    res = await database.fetch_all(query)
+    edges = list(map(point_obj_to_list,res)) # [...[id, from, to, name]...]
+
+    return points, edges
+
+
 
 
 query_for_citypoints_v1 = """
@@ -340,4 +406,8 @@ SELECT "Points".id, "Points".longitude, "Points".latitude FROM (SELECT id_src FR
 query_for_edges_wnames_v1="""
 SELECT id, id_src, id_dist, value FROM (SELECT id, id_src, id_dist, id_way FROM "Edges" JOIN (SELECT
 "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) e JOIN (SELECT id_way, value FROM "WayProperties" WHERE id_property = 3) p ON e.id_way = p.id_way;
+"""
+
+q = """
+SELECT "Points".id, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id WHERE "Points".longitude > 91.4;
 """
