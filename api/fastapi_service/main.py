@@ -108,14 +108,14 @@ async def city_graph(
     status_code = 200
     detail = "OK"
 
-    graph = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids)
-    if graph is None:
+    points, edges = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids)
+    if points is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+    # response = pd.DataFrame(graph).to_csv(sep=',', index=False)
 
     return StreamingResponse(
     iter([response]),
@@ -126,7 +126,7 @@ async def city_graph(
 
 @app.post('/api/city/graph/bbox/{city_id}/')
 @logger.catch(exclude=HTTPException)
-async def city_graph(
+async def city_graph_poly(
     city_id: int,
     polygons_as_list:  List[List[List[float]]]
 ):
@@ -135,15 +135,15 @@ async def city_graph(
     detail = "OK"
 
     polygon = services.list_to_polygon(polygons=polygons_as_list)
-    graph = await services.graph_from_poly(city_id=city_id, polygon=polygon)
+    points, edges = await services.graph_from_poly(city_id=city_id, polygon=polygon)
     
-    if graph is None:
+    if points is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+    # response = pd.DataFrame(graph).to_csv(sep=',', index=False)
 
     return StreamingResponse(
     iter([response]),
