@@ -1,5 +1,6 @@
 from database import engine, Base, SessionLocal, database
 from models import City, CityProperty, Point
+from shapely.geometry.point import Point as ShapelyPoint
 from database import *
 from schemas import CityBase, PropertyBase, PointBase, RegionBase
 from shapely.geometry.multilinestring import MultiLineString
@@ -136,9 +137,9 @@ def add_graph_to_db(city_id : int, file_path : str):
                 pass
             graph = ways[key].pop('graph')
             way_dict = ways[key]
-            oneway=False
+            oneway = False
             if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
-                oneway=True
+                oneway = True
             for edge in graph:
                 try:
                     query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[0]}', id_dist=f'{edge[1]}')
@@ -330,10 +331,6 @@ def get_regions(city_id : int, regions : GeoDataFrame, cities : DataFrame) -> Li
             return None
         return get_admin_levels(city=city, regions=regions, cities=cities)
 
-async def graph_from_poly(city_id, polygon):
-    print(polygon.bounds) #min_lon, min_lat, max_lon, max_lat
-    return None
-
 def list_to_polygon(polygons : List[List[List[float]]]):
     return unary_union([Polygon(polygon) for polygon in polygons])
 
@@ -346,49 +343,21 @@ def polygons_from_region(regions_ids : List[int], regions : GeoDataFrame):
 async def graph_from_ids(city_id : int, regions_ids : List[int], regions : GeoDataFrame):
     polygon = polygons_from_region(regions_ids=regions_ids, regions=regions)
     if polygon == None:
-        return None
-    return graph_from_poly(city_id=city_id, polygon=polygon)
+        return None, None
+    return await graph_from_poly(city_id=city_id, polygon=polygon)
     
 def point_obj_to_list(db_record) -> List:
     return [db_record.id, db_record.longitude, db_record.latitude]
 
 def edge_obj_to_list(db_record) -> List:
-    return [db_record.id, db_record.id_src, db_record.id_dist, db_record.value]
-
-async def graph_from_id(city_id, region_id): #реализован механизм доставания точек и ребер города по id
-    q = CityAsync.select().where(CityAsync.c.id == city_id)
-    city = await database.fetch_one(q)
-    if city is None or not city.downloaded: # add region check
-        return None
-    query = text(
-        f"""
-        SELECT "Points".id, "Points".longitude, "Points".latitude
-        FROM (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p
-        JOIN "Points" ON p.id_src = "Points".id;
-        """)
-    res = await database.fetch_all(query)
-
-    points = list(map(point_obj_to_list,res)) # [...[id, longitude, latitude]...]
-    q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
-    prop = await database.fetch_one(q)
-    prop_id = prop.id
-    query = text(
-        f""" SELECT id, id_src, id_dist, value FROM 
-        (SELECT id, id_src, id_dist, id_way FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) e JOIN 
-        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) p ON e.id_way = p.id_way;
-        """)
-    res = await database.fetch_all(query)
-    edges = list(map(point_obj_to_list,res)) # [...[id, from, to, name]...]
-
-    return points, edges
+    return [db_record.id, db_record.id_way, db_record.id_src, db_record.id_dist, db_record.value]
 
 def bbox_from_poly():
     pass
 
-async def graph_from_poly(city_id,polygon):
-    bbox = bbox_from_poly(polygon)
+async def graph_from_poly(city_id, polygon):
+    bbox = polygon.bounds   # min_lon, min_lat, max_lon, max_lat
+
     q = CityAsync.select().where(CityAsync.c.id == city_id)
     city = await database.fetch_one(q)
     if city is None or not city.downloaded:
@@ -397,28 +366,46 @@ async def graph_from_poly(city_id,polygon):
         f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
         (SELECT id_src FROM "Edges" JOIN 
         (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
-        WHERE "Points".longitude < {bbox['?']} and "Points".longitude > {bbox['?']} and "Points".latitude > {bbox['?']} and "Points".latitude < {bbox['?']};
+        WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
         """)
     res = await database.fetch_all(query)
-    points = list(map(point_obj_to_list,res)) # [...[id, longitude, latitude]...]
+    points = list(map(point_obj_to_list, res)) # [...[id, longitude, latitude]...]
     q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
     prop = await database.fetch_one(q)
     prop_id = prop.id
     query = text(
-        f"""SELECT id, id_src, id_dist, value FROM 
-        (SELECT id, id_src, id_dist, value FROM "Edges" JOIN 
+        f"""SELECT id, id_way, id_src, id_dist, value FROM 
+        (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
         (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
         (SELECT "Points".id as point_id FROM 
         (SELECT id_src FROM "Edges" JOIN 
         (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
-        p.id_src = "Points".id WHERE "Points".longitude < {bbox['?']} and "Points".longitude > {bbox['?']} and "Points".latitude > {bbox['?']} and "Points".latitude < {bbox['?']}) AS b ON a.id_src = b.point_id; 
+        p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
         """)
     res = await database.fetch_all(query)
-    edges = list(map(point_obj_to_list,res)) # [...[id, from, to, name]...]
+    edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
 
-    return points, edges
+    return filter_by_polygon(polygon=polygon, edges=edges, points=points)
 
+def filter_by_polygon(polygon, edges, points):
+    points_ids = set()
+    points_filtred = []
+    edges_filtred = []
 
+    for point in points:
+        lon = point[1]
+        lat = point[2]
+        if polygon.contains(ShapelyPoint(lon, lat)):
+            points_ids.add(point[0])
+            points_filtred.append(point)
+
+    for edge in edges:
+        id_from = edge[2]
+        id_to = edge[3]
+        if (id_from in points_ids) and (id_to in points_ids):
+            edges_filtred.append(edge)
+
+    return points_filtred, edges_filtred
 
 
 query_for_citypoints_v1 = """

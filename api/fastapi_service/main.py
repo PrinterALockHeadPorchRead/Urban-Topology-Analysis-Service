@@ -29,7 +29,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await database.connect()
-    services.init_db()
+    services.init_db(cities_info=cities_info)
 
 
 @app.on_event("shutdown")
@@ -99,7 +99,7 @@ async def city_regions(
 
 
 
-@app.get('/api/city/graph/region/')
+@app.post('/api/city/graph/region/')
 @logger.catch(exclude=HTTPException)
 async def city_graph(
     city_id: int,
@@ -109,7 +109,7 @@ async def city_graph(
     status_code = 200
     detail = "OK"
 
-    points, edges = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids)
+    points, edges = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids, regions=regions_df)
     if points is None or edges is None:
         status_code = 404
         detail = "NOT FOUND"
@@ -117,7 +117,7 @@ async def city_graph(
         raise HTTPException(status_code=status_code, detail=detail)
     #print(graph)
 
-    response = pd.DataFrame(points).to_csv(sep=',', index=False)  # нужно заменить columns на названия
+    response = pd.DataFrame(edges).to_csv(sep=',', index=False)  # нужно заменить columns на названия
                # pd.DataFrame(points).to_csv(sep=',', index=False) # нужно заменить columns на названия
 
     return StreamingResponse( #2 файла не отсылаются, исправить
