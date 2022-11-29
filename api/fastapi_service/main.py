@@ -12,6 +12,7 @@ import geopandas as gpd
 import services
 import logs 
 
+
 regions_df = gpd.read_file('./data/regions.json', driver='GeoJSON')
 cities_info = pd.read_csv('./data/cities.csv')
 app = FastAPI()
@@ -25,22 +26,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-if __name__ == "__main__":
-    services.add_tables() 
-    services.init_db(cities_info=cities_info)
-    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
-
-metadata.create_all(engine)
-
 @app.on_event("startup")
 async def startup():
     await database.connect()
+    services.init_db()
 
 
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
 
+if __name__ == "__main__":
+    metadata.create_all(engine)
+    run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
+    #services.add_tables() 
 
 @app.get("/api/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
@@ -78,6 +77,7 @@ async def get_cities(
     return cities
 
 
+
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
 async def city_regions(
@@ -98,6 +98,7 @@ async def city_regions(
     return regions
 
 
+
 @app.get('/api/city/graph/region/')
 @logger.catch(exclude=HTTPException)
 async def city_graph(
@@ -109,15 +110,17 @@ async def city_graph(
     detail = "OK"
 
     points, edges = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids)
-    if points is None:
+    if points is None or edges is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
+    #print(graph)
 
-    # response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+    response = pd.DataFrame(points).to_csv(sep=',', index=False)  # нужно заменить columns на названия
+               # pd.DataFrame(points).to_csv(sep=',', index=False) # нужно заменить columns на названия
 
-    return StreamingResponse(
+    return StreamingResponse( #2 файла не отсылаются, исправить
     iter([response]),
     media_type='text/csv',
     headers={"Content-Disposition":
@@ -143,9 +146,9 @@ async def city_graph_poly(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    # response = pd.DataFrame(graph).to_csv(sep=',', index=False)
+    response = pd.DataFrame(points).to_csv(sep=',', index=False)
 
-    return StreamingResponse(
+    return StreamingResponse( #2 файла не отсылаются, исправить
     iter([response]),
     media_type='text/csv',
     headers={"Content-Disposition":

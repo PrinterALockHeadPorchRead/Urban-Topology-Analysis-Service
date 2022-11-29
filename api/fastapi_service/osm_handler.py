@@ -1,4 +1,3 @@
-from street_name_parser import parse_name
 from typing import Tuple
 import osmium as o
 import traceback
@@ -29,27 +28,26 @@ class HighwayWaysHandler(o.SimpleHandler):
            
             graph = []
             for i in range(0, len(w.nodes) - 1):
-                graph.append([w.nodes[i].ref, w.nodes[i+1].ref])
-                self.used_nodes_ids[w.nodes[i].ref] = None
+                graph.append([int(w.nodes[i].ref), int(w.nodes[i+1].ref)])
+                self.used_nodes_ids[int(w.nodes[i].ref)] = {'lat':w.nodes[i].lat, 'lon':w.nodes[i].lon}
 
-            self.used_nodes_ids[w.nodes[len(w.nodes) - 1]] = None
+            i = len(w.nodes) - 1
+            self.used_nodes_ids[int(w.nodes[i].ref)] = {'lat':w.nodes[i].lat, 'lon':w.nodes[i].lon}
             self.ways_tags[w.id]['graph'] = graph
                      
 
 class HighwayNodesHandler(o.SimpleHandler):
+   
     def __init__(self, used_nodes_ids):
         super(HighwayNodesHandler, self).__init__()
-        self.used_nodes_ids = used_nodes_ids
-        self.nodes_tags = {}
+        self.nodes_tags = used_nodes_ids
 
     def node(self, n):
-        if n.id in self.used_nodes_ids.keys():  
-            self.nodes_tags[n.id] = {'lat' :  n.location.lat, 'lon' : n.location.lon}
-
+        if n.id in self.nodes_tags.keys():  
             dct = {tag.k : tag.v for tag in n.tags}
             if len(dct) == 0:
                 return
-            
+    
             for k, v in dct.items():
                 self.nodes_tags[n.id][k] = v
             
@@ -57,13 +55,13 @@ class HighwayNodesHandler(o.SimpleHandler):
 def parse_osm(osm_file_path) -> Tuple[dict, dict]:
     ways = HighwayWaysHandler()
     try:
-        ways.apply_file(osm_file_path, locations=True)
+        ways.apply_file(osm_file_path, locations=False)
     except RuntimeError:
         pass
-
+   
     nodes = HighwayNodesHandler(ways.used_nodes_ids)
     try:
-        nodes.apply_file(osm_file_path, locations=True)
+        nodes.apply_file(osm_file_path, locations=False)
     except RuntimeError:
         pass
 

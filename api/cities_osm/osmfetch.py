@@ -67,4 +67,3 @@ def download_city(city_name : str) -> str:
         print('Invalid city name')
         return None
 
-download_city('Санкт-Петербург')
