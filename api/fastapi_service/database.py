@@ -99,7 +99,7 @@ PointPropertyAsync = Table(
 )
 
 
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(DATABASE_URL, echo=False)
 
 database = Database(DATABASE_URL)
 

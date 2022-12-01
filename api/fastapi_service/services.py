@@ -352,8 +352,11 @@ def point_obj_to_list(db_record) -> List:
 def edge_obj_to_list(db_record) -> List:
     return [db_record.id, db_record.id_way, db_record.id_src, db_record.id_dist, db_record.value]
 
-def bbox_from_poly():
-    pass
+def record_obj_to_wprop(record):
+    return [record.id_way ,record.property ,record.value]
+
+def record_obj_to_pprop(record):
+    return [record.id_point ,record.property ,record.value]
 
 async def graph_from_poly(city_id, polygon):
     bbox = polygon.bounds   # min_lon, min_lat, max_lon, max_lat
@@ -385,10 +388,42 @@ async def graph_from_poly(city_id, polygon):
     res = await database.fetch_all(query)
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
 
-    return filter_by_polygon(polygon=polygon, edges=edges, points=points)
+    points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
+    ways_prop = []
+    point_prop = []
+    conn = engine.connect()
+    for id_way in ways_prop_ids:
+        query = text(
+            f"""SELECT id_way, property, value FROM 
+            (SELECT id_way, id_property, value FROM "WayProperties" WHERE id_way = {id_way}) AS p 
+            JOIN "Properties" ON p.id_property = "Properties".id;
+            """)
+
+        res = conn.execute(query).fetchall()
+        prop = list(map(record_obj_to_wprop, res))
+        ways_prop.extend(prop)
+
+    for id_point in points_prop_ids:
+        query = text(
+            f"""SELECT id_point, property, value FROM 
+            (SELECT id_point, id_property, value FROM "PointProperties" WHERE id_point = {id_point}) AS p 
+            JOIN "Properties" ON p.id_property = "Properties".id;
+            """)
+
+        res = conn.execute(query).fetchall()
+        prop = list(map(record_obj_to_pprop, res))
+        point_prop.extend(prop)
+
+    return points, edges, point_prop, ways_prop
+    
+        
+        
+
+    
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()
+    ways_prop_ids = set()
     points_filtred = []
     edges_filtred = []
 
@@ -404,8 +439,9 @@ def filter_by_polygon(polygon, edges, points):
         id_to = edge[3]
         if (id_from in points_ids) and (id_to in points_ids):
             edges_filtred.append(edge)
+            ways_prop_ids.add(edge[1])
 
-    return points_filtred, edges_filtred
+    return points_filtred, edges_filtred, ways_prop_ids, points_ids
 
 
 query_for_citypoints_v1 = """

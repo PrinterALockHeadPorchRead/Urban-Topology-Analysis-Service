@@ -109,7 +109,7 @@ async def city_graph(
     status_code = 200
     detail = "OK"
 
-    points, edges = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids, regions=regions_df)
+    points, edges, pprop, wprop  = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids, regions=regions_df)
     if points is None or edges is None:
         status_code = 404
         detail = "NOT FOUND"
@@ -117,11 +117,12 @@ async def city_graph(
         raise HTTPException(status_code=status_code, detail=detail)
     #print(graph)
 
-    response = pd.DataFrame(edges).to_csv(sep=',', index=False)  # нужно заменить columns на названия
+    edges_df = pd.DataFrame(edges).to_csv(sep=',', index=False)  # нужно заменить columns на названия
                # pd.DataFrame(points).to_csv(sep=',', index=False) # нужно заменить columns на названия
+    points_df = pd.DataFrame(points).to_csv(sep=',', index=False)
 
     return StreamingResponse( #2 файла не отсылаются, исправить
-    iter([response]),
+    iter([edges_df]),
     media_type='text/csv',
     headers={"Content-Disposition":
              f"attachment;filename=<{city_id}_{regions_ids}>.csv"})
@@ -138,7 +139,7 @@ async def city_graph_poly(
     detail = "OK"
 
     polygon = services.list_to_polygon(polygons=polygons_as_list)
-    points, edges = await services.graph_from_poly(city_id=city_id, polygon=polygon)
+    points, edges, pprop, wprop = await services.graph_from_poly(city_id=city_id, polygon=polygon)
     
     if points is None:
         status_code = 404
