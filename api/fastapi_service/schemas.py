@@ -9,7 +9,8 @@ class PointBase(BaseModel):
 class PropertyBase(BaseModel):
     population : int
     population_density : Optional[float]
-    center : Optional[PointBase]
+    c_longitude : float
+    c_latitude : float
     time_zone : str
     time_created : str
 

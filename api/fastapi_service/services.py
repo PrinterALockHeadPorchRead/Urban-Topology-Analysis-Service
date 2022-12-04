@@ -19,9 +19,6 @@ import ast
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-def add_tables():
-    return Base.metadata.create_all(bind=engine)
-
 def get_db():
     db = SessionLocal()
     try:
@@ -39,19 +36,15 @@ async def property_to_scheme(property : CityProperty) -> PropertyBase:
     if property is None:
         return None
 
-    property_base = PropertyBase(population=property.population, population_density=property.population_density, time_zone=property.time_zone, time_created=str(property.time_created))
-    query = PointAsync.select().where(PointAsync.c.id == property.id_center)
-    point = await database.fetch_one(query)
-    point_base = point_to_scheme(point=point)
-    property_base.center = point_base
-    
-    return property_base
+    return PropertyBase(population=property.population, population_density=property.population_density, 
+                        time_zone=property.time_zone, time_created=str(property.time_created),
+                        c_latitude = property.c_latitude, c_longitude = property.c_longitude)
 
 async def city_to_scheme(city : City) -> CityBase:
     if city is None:
         return None
 
-    city_base = CityBase(id=city.id, city_name=city.city_name, downloaded=city.downloaded)
+    city_base = CityBase(id=city.id, city_name=city.city_name, downloaded=city.downloaded, )
     query = CityPropertyAsync.select().where(CityPropertyAsync.c.id == city.id_property)
     property = await database.fetch_one(query)
     property_base = await property_to_scheme(property=property)
@@ -343,7 +336,7 @@ def polygons_from_region(regions_ids : List[int], regions : GeoDataFrame):
 async def graph_from_ids(city_id : int, regions_ids : List[int], regions : GeoDataFrame):
     polygon = polygons_from_region(regions_ids=regions_ids, regions=regions)
     if polygon == None:
-        return None, None
+        return None, None, None, None
     return await graph_from_poly(city_id=city_id, polygon=polygon)
     
 def point_obj_to_list(db_record) -> List:
@@ -364,7 +357,7 @@ async def graph_from_poly(city_id, polygon):
     q = CityAsync.select().where(CityAsync.c.id == city_id)
     city = await database.fetch_one(q)
     if city is None or not city.downloaded:
-        return None
+        return None, None, None, None
     query = text(
         f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
         (SELECT id_src FROM "Edges" JOIN 
@@ -389,37 +382,36 @@ async def graph_from_poly(city_id, polygon):
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
 
     points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
-    ways_prop = []
-    point_prop = []
     conn = engine.connect()
-    for id_way in ways_prop_ids:
-        query = text(
-            f"""SELECT id_way, property, value FROM 
-            (SELECT id_way, id_property, value FROM "WayProperties" WHERE id_way = {id_way}) AS p 
-            JOIN "Properties" ON p.id_property = "Properties".id;
-            """)
 
-        res = conn.execute(query).fetchall()
-        prop = list(map(record_obj_to_wprop, res))
-        ways_prop.extend(prop)
+    ids_ways = build_or_query('id_way', ways_prop_ids)
+    query = text(
+        f"""SELECT id_way, property, value FROM 
+        (SELECT id_way, id_property, value FROM "WayProperties" WHERE {ids_ways}) AS p 
+        JOIN "Properties" ON p.id_property = "Properties".id;
+        """)
 
-    for id_point in points_prop_ids:
-        query = text(
-            f"""SELECT id_point, property, value FROM 
-            (SELECT id_point, id_property, value FROM "PointProperties" WHERE id_point = {id_point}) AS p 
-            JOIN "Properties" ON p.id_property = "Properties".id;
-            """)
+    res = conn.execute(query).fetchall()
+    ways_prop = list(map(record_obj_to_wprop, res))
 
-        res = conn.execute(query).fetchall()
-        prop = list(map(record_obj_to_pprop, res))
-        point_prop.extend(prop)
+    ids_points = build_or_query('id_point', points_prop_ids)
+    query = text(
+        f"""SELECT id_point, property, value FROM 
+        (SELECT id_point, id_property, value FROM "PointProperties" WHERE {ids_points}) AS p 
+        JOIN "Properties" ON p.id_property = "Properties".id;
+        """)
 
-    return points, edges, point_prop, ways_prop
-    
-        
-        
+    res = conn.execute(query).fetchall()
+    points_prop = list(map(record_obj_to_pprop, res))
 
-    
+    return points, edges, points_prop, ways_prop    
+
+def build_or_query(query_field : str, data_set : set()):
+    buffer = ''
+    for element in data_set:
+        buffer += f'{query_field} = {element} OR '
+
+    return buffer[0:len(buffer)-4]
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()

@@ -12,7 +12,6 @@ import geopandas as gpd
 import services
 import logs 
 
-
 regions_df = gpd.read_file('./data/regions.json', driver='GeoJSON')
 cities_info = pd.read_csv('./data/cities.csv')
 app = FastAPI()
@@ -31,7 +30,6 @@ async def startup():
     await database.connect()
     services.init_db(cities_info=cities_info)
 
-
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
@@ -39,7 +37,6 @@ async def shutdown():
 if __name__ == "__main__":
     metadata.create_all(engine)
     run("main:app", host="0.0.0.0", port=getenv("PORT", 8002), reload=True)
-    #services.add_tables() 
 
 @app.get("/api/city/", response_model=CityBase)
 @logger.catch(exclude=HTTPException)
@@ -77,7 +74,6 @@ async def get_cities(
     return cities
 
 
-
 @app.get("/api/regions/city/", response_model=List[RegionBase])
 @logger.catch(exclude=HTTPException)
 async def city_regions(
@@ -98,7 +94,6 @@ async def city_regions(
     return regions
 
 
-
 @app.post('/api/city/graph/region/')
 @logger.catch(exclude=HTTPException)
 async def city_graph(
@@ -115,17 +110,17 @@ async def city_graph(
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
-    #print(graph)
 
-    edges_df = pd.DataFrame(edges).to_csv(sep=',', index=False)  # нужно заменить columns на названия
-               # pd.DataFrame(points).to_csv(sep=',', index=False) # нужно заменить columns на названия
-    points_df = pd.DataFrame(points).to_csv(sep=',', index=False)
+    edges_df = pd.DataFrame(edges, columns=['id', 'id_way', 'from', 'to', 'name']).to_csv(sep=',', index=False)
+    points_df = pd.DataFrame(points, columns=['id', 'longitude', 'latitude']).to_csv(sep=',', index=False)
+    pprop_df = pd.DataFrame(pprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
+    wprop_df = pd.DataFrame(wprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
 
     return StreamingResponse( #2 файла не отсылаются, исправить
-    iter([edges_df]),
-    media_type='text/csv',
-    headers={"Content-Disposition":
-             f"attachment;filename=<{city_id}_{regions_ids}>.csv"})
+        iter([pprop_df]),
+        media_type='text/csv',
+        headers={"Content-Disposition":
+                f"attachment;filename=<{city_id}_{regions_ids}>.csv"})
 
 
 @app.post('/api/city/graph/bbox/{city_id}/')
@@ -147,10 +142,13 @@ async def city_graph_poly(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    response = pd.DataFrame(points).to_csv(sep=',', index=False)
+    edges_df = pd.DataFrame(edges, columns=['id', 'id_way', 'from', 'to', 'name']).to_csv(sep=',', index=False)
+    points_df = pd.DataFrame(points, columns=['id', 'longitude', 'latitude']).to_csv(sep=',', index=False)
+    pprop_df = pd.DataFrame(pprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
+    wprop_df = pd.DataFrame(wprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
 
     return StreamingResponse( #2 файла не отсылаются, исправить
-    iter([response]),
+    iter([edges_df]),
     media_type='text/csv',
     headers={"Content-Disposition":
              f"attachment;filename=<{city_id}>.csv"})

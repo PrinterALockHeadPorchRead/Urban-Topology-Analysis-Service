@@ -18,7 +18,6 @@ from sqlalchemy.orm import sessionmaker
 from datetime import datetime
 from databases import Database
 
-
 DATABASE_URL = "postgresql://user:password@postgres:5432/fastapi_database"
 
 metadata = MetaData()
@@ -44,7 +43,7 @@ CityPropertyAsync = Table(
     "CityProperties",
     metadata,
     Column("id", Integer, primary_key=True, autoincrement=True, nullable=True),
-    Column("c_latitude", Float),
+    Column("c_latitude", Float, nullable=True),
     Column("c_longitude", Float),
     Column("id_district", Integer),
     Column("id_start_polygon", BigInteger),
@@ -99,7 +98,7 @@ PointPropertyAsync = Table(
 )
 
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, echo=True)
 
 database = Database(DATABASE_URL)
 
