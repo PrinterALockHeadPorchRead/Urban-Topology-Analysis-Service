@@ -15,6 +15,8 @@ from sqlalchemy import update, text
 import osmnx as ox
 import os.path
 import ast
+import pandas as pd
+import networkx as nx
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -452,3 +454,80 @@ SELECT id, id_src, id_dist, value FROM (SELECT id, id_src, id_dist, id_way FROM 
 q = """
 SELECT "Points".id, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id WHERE "Points".longitude > 91.4;
 """
+
+
+
+# ====================================================================== #
+# ====================================================================== #
+
+nodata = '-'
+merging_col = 'id_way'
+
+
+def union_and_delete(graph):
+    edge_to_remove = list()
+
+    for source, target, attr in graph.edges(data=True):
+        attr['node_id'] = {source, target}
+        attr['cross_ways'] = set()
+
+    for source, target, attributes in graph.edges(data=True):
+        for id1, id2, attr in graph.edges(data=True):
+            if source == id1 and target == id2:
+                continue
+            if (attributes[merging_col] == attr[merging_col] and attributes[merging_col] != nodata) \
+                    and len(attributes['node_id'].intersection(attr['node_id'])):
+                attributes['node_id'] = attributes['node_id'].union(attr['node_id'])
+                attr['node_id'].clear()
+                edge_to_remove.append((id1, id2))
+            elif (attributes[merging_col] != attr[merging_col] or attributes[merging_col] == nodata) \
+                    and len(attributes['node_id'].intersection({id1, id2})):
+                if attr[merging_col] != nodata:
+                    attributes['cross_ways'].add(attr[merging_col])
+                else:
+                    attributes['cross_ways'].add(str(id1) + str(nodata) + str(id2))
+
+    graph.remove_edges_from(edge_to_remove)
+
+
+def reverse_graph(graph):
+    new_graph = nx.Graph()
+
+    new_graph.add_nodes_from([(attr[merging_col], attr) if attr[merging_col] != nodata
+                              else (str(source) + str(nodata) + str(target), attr)
+                              for source, target, attr in graph.edges(data=True)])
+
+    for node_id, attributes in new_graph.nodes(data=True):
+        for id, attr in new_graph.nodes(data=True):
+            if id in attributes['cross_ways']:
+                new_graph.add_edge(node_id, id)
+
+    return new_graph
+
+
+def convert_to_df(graph, source='source', target='target'):
+    edges_df = nx.to_pandas_edgelist(graph, source='source_way', target='target_way')
+    nodes_df = pd.DataFrame.from_dict(graph.nodes, orient='index')
+
+    return edges_df, nodes_df
+
+
+def get_reversed_graph(graph, source='source', target='target', merging_column='street_id', empty_cell_sign='-',
+                       edge_attr=['street_id']):
+    global nodata
+    global merging_col
+    nodata = empty_cell_sign
+    merging_col = merging_column
+
+    pd_graph = pd.read_csv(graph)
+
+    nx_graph = nx.from_pandas_edgelist(pd_graph, source=source, target=target, edge_attr=edge_attr)
+    adjacency_df = nx.to_pandas_adjacency(nx_graph, weight=merging_column)
+    union_and_delete(nx_graph)
+
+    new_graph = reverse_graph(nx_graph)
+    edges_ds, nodes_df = convert_to_df(new_graph, source='source_way', target='target_way')
+    return edges_ds, nodes_df, adjacency_df
+
+# ====================================================================== #
+# ====================================================================== #
