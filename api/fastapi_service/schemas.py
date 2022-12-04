@@ -31,6 +31,10 @@ class GraphBase(BaseModel):
     points_csv : str
     ways_properties_csv : str
     points_properties_csv : str
+    reversed_edges_csv : str
+    reversed_nodes_csv : str
+    reversed_matrix_csv : str
+
 
 
     

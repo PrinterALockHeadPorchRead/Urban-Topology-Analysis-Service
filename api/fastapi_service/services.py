@@ -20,6 +20,7 @@ import ast
 import io
 import pandas as pd
 import networkx as nx
+import time
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -37,19 +38,48 @@ def point_to_scheme(point : Point) -> PointBase:
 
     return PointBase(latitude=point.latitude, longitude=point.longitude)
 
-def list_to_csv_str(data, columns):
+def list_to_csv_str(data, columns : List['str']):
     buffer = io.StringIO()
-    pd.DataFrame(data, columns=columns).to_csv(buffer, index=False)
-    return buffer.getvalue()
+    df = pd.DataFrame(data, columns=columns)
+    df.to_csv(buffer, index=False)
+    return buffer.getvalue(), df
+
+def reversed_graph_to_csv_str(edges_df : DataFrame):
+    redges_df, rnodes_df, rmatrix_df = get_reversed_graph(edges_df, 
+                                                          source='source', 
+                                                          target='target', 
+                                                          merging_column='id_way', 
+                                                          empty_cell_sign='', 
+                                                          edge_attr=['id_way'])
+
+    redges = io.StringIO()
+    rnodes = io.StringIO()
+    rmatrix = io.StringIO()
+
+    redges_df.to_csv(redges, index=False)
+    rnodes_df.to_csv(rnodes, index=False)
+    rmatrix_df.to_csv(rmatrix, index=False)
+
+    return redges.getvalue(), rnodes.getvalue(), rmatrix.getvalue()
 
 def graph_to_scheme(points, edges, pprop, wprop) -> GraphBase:
-    edges_str = list_to_csv_str(edges, ['id', 'id_way', 'source', 'target', 'name'])
-    points_str = list_to_csv_str(points, ['id', 'longitude', 'latitude'])
-    pprop_str = list_to_csv_str(pprop, ['id', 'property', 'value'])
-    wprop_str = list_to_csv_str(wprop, ['id', 'property', 'value'])
+    edges_str, edges_df = list_to_csv_str(edges, ['id', 'id_way', 'source', 'target', 'name'])
+    points_str, _ = list_to_csv_str(points, ['id', 'longitude', 'latitude'])
+    pprop_str, _ = list_to_csv_str(pprop, ['id', 'property', 'value'])
+    wprop_str, _ = list_to_csv_str(wprop, ['id', 'property', 'value'])
+
+    print('START::')
+    print(type(edges_df))
+    print(edges_df.head())
+
+    time.sleep(20)
+
+    r_edges_str, r_nodes_str, r_matrix_str = reversed_graph_to_csv_str(edges_df)
 
     return GraphBase(edges_csv=edges_str, points_csv=points_str, 
-                     ways_properties_csv=wprop_str, points_properties_csv=pprop_str)
+                     ways_properties_csv=wprop_str, points_properties_csv=pprop_str,
+                     reversed_edges_csv=r_edges_str, reversed_nodes_csv=r_nodes_str,
+                     reversed_matrix_csv=r_matrix_str)
 
 async def property_to_scheme(property : CityProperty) -> PropertyBase:
     if property is None:

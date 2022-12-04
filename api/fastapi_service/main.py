@@ -133,13 +133,7 @@ async def city_graph_poly(
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
-
-    # reversed_edges_df, reversed_nodes_df, reversed_matrix_df = services.get_reversed_graph(edges_df, 
-    #                                                                                        source='source', 
-    #                                                                                        target='target', 
-    #                                                                                        merging_column='id_way', 
-    #                                                                                        empty_cell_sign='', 
-    #                                                                                        edge_attr=['id_way'])
+    
     logger.info(f"{request} {status_code} {detail}")
     return services.graph_to_scheme(points, edges, pprop, wprop)
 
