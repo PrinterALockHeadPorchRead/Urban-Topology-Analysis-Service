@@ -147,6 +147,15 @@ async def city_graph_poly(
     pprop_df = pd.DataFrame(pprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
     wprop_df = pd.DataFrame(wprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
 
+# ====================================================================== #
+    reversed_edges_df, reversed_nodes_df, reversed_matrix_df = services.get_reversed_graph(edges_df, 
+                                                                                           source='source', 
+                                                                                           target='target', 
+                                                                                           merging_column='id_way', 
+                                                                                           empty_cell_sign='', 
+                                                                                           edge_attr=['id_way'])
+# ====================================================================== #
+
     return StreamingResponse( #2 файла не отсылаются, исправить
     iter([edges_df]),
     media_type='text/csv',
