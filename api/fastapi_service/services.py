@@ -2,7 +2,7 @@ from database import engine, Base, SessionLocal, database
 from models import City, CityProperty, Point
 from shapely.geometry.point import Point as ShapelyPoint
 from database import *
-from schemas import CityBase, PropertyBase, PointBase, RegionBase
+from schemas import CityBase, PropertyBase, PointBase, RegionBase, GraphBase
 from shapely.geometry.multilinestring import MultiLineString
 from shapely.geometry.linestring import LineString
 from shapely.geometry.polygon import Polygon
@@ -12,9 +12,12 @@ from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
 from typing import List, TYPE_CHECKING
 from sqlalchemy import update, text
+
+import pandas as pd
 import osmnx as ox
 import os.path
 import ast
+import io
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
@@ -31,6 +34,20 @@ def point_to_scheme(point : Point) -> PointBase:
         return None
 
     return PointBase(latitude=point.latitude, longitude=point.longitude)
+
+def list_to_csv_str(data, columns):
+    buffer = io.StringIO()
+    pd.DataFrame(data, columns=columns).to_csv(buffer, index=False)
+    return buffer.getvalue()
+
+def graph_to_scheme(points, edges, pprop, wprop) -> GraphBase:
+    edges_str = list_to_csv_str(edges, ['id', 'id_way', 'source', 'target', 'name'])
+    points_str = list_to_csv_str(points, ['id', 'longitude', 'latitude'])
+    pprop_str = list_to_csv_str(pprop, ['id', 'property', 'value'])
+    wprop_str = list_to_csv_str(wprop, ['id', 'property', 'value'])
+
+    return GraphBase(edges_csv=edges_str, points_csv=points_str, 
+                     ways_properties_csv=wprop_str, points_properties_csv=pprop_str)
 
 async def property_to_scheme(property : CityProperty) -> PropertyBase:
     if property is None:

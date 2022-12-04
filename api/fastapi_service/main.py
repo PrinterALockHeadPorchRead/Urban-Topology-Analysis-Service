@@ -4,7 +4,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from uvicorn import run
 from os import getenv
-from schemas import CityBase, RegionBase
+from schemas import CityBase, RegionBase, GraphBase
 from database import database, engine, metadata
 
 import pandas as pd
@@ -94,7 +94,7 @@ async def city_regions(
     return regions
 
 
-@app.post('/api/city/graph/region/')
+@app.post('/api/city/graph/region/', response_model=GraphBase)
 @logger.catch(exclude=HTTPException)
 async def city_graph(
     city_id: int,
@@ -105,25 +105,17 @@ async def city_graph(
     detail = "OK"
 
     points, edges, pprop, wprop  = await services.graph_from_ids(city_id=city_id, regions_ids=regions_ids, regions=regions_df)
-    if points is None or edges is None:
+    
+    if points is None:
         status_code = 404
         detail = "NOT FOUND"
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    edges_df = pd.DataFrame(edges, columns=['id', 'id_way', 'from', 'to', 'name']).to_csv(sep=',', index=False)
-    points_df = pd.DataFrame(points, columns=['id', 'longitude', 'latitude']).to_csv(sep=',', index=False)
-    pprop_df = pd.DataFrame(pprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
-    wprop_df = pd.DataFrame(wprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
-
-    return StreamingResponse( #2 файла не отсылаются, исправить
-        iter([pprop_df]),
-        media_type='text/csv',
-        headers={"Content-Disposition":
-                f"attachment;filename=<{city_id}_{regions_ids}>.csv"})
+    return services.graph_to_scheme(points, edges, pprop, wprop)
 
 
-@app.post('/api/city/graph/bbox/{city_id}/')
+@app.post('/api/city/graph/bbox/{city_id}/', response_model=GraphBase)
 @logger.catch(exclude=HTTPException)
 async def city_graph_poly(
     city_id: int,
@@ -142,17 +134,7 @@ async def city_graph_poly(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
-    edges_df = pd.DataFrame(edges, columns=['id', 'id_way', 'from', 'to', 'name']).to_csv(sep=',', index=False)
-    points_df = pd.DataFrame(points, columns=['id', 'longitude', 'latitude']).to_csv(sep=',', index=False)
-    pprop_df = pd.DataFrame(pprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
-    wprop_df = pd.DataFrame(wprop, columns=['id', 'property', 'value']).to_csv(sep=',', index=False)
-
-    return StreamingResponse( #2 файла не отсылаются, исправить
-    iter([edges_df]),
-    media_type='text/csv',
-    headers={"Content-Disposition":
-             f"attachment;filename=<{city_id}>.csv"})
-
+    return services.graph_to_scheme(points, edges, pprop, wprop)
 
 
 # Useless:
