@@ -1,7 +1,6 @@
 from typing import List
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
 from uvicorn import run
 from os import getenv
 from schemas import CityBase, RegionBase, GraphBase
@@ -112,6 +111,7 @@ async def city_graph(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
+    logger.info(f"{request} {status_code} {detail}")
     return services.graph_to_scheme(points, edges, pprop, wprop)
 
 
@@ -134,8 +134,16 @@ async def city_graph_poly(
         logger.error(f"{request} {status_code} {detail}")
         raise HTTPException(status_code=status_code, detail=detail)
 
+    # reversed_edges_df, reversed_nodes_df, reversed_matrix_df = services.get_reversed_graph(edges_df, 
+    #                                                                                        source='source', 
+    #                                                                                        target='target', 
+    #                                                                                        merging_column='id_way', 
+    #                                                                                        empty_cell_sign='', 
+    #                                                                                        edge_attr=['id_way'])
+    logger.info(f"{request} {status_code} {detail}")
     return services.graph_to_scheme(points, edges, pprop, wprop)
 
+    
 
 # Useless:
 
