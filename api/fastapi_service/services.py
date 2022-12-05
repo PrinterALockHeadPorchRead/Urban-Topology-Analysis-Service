@@ -506,25 +506,26 @@ merging_col = 'id_way'
 def union_and_delete(graph):
     edge_to_remove = list()
 
-    for source, target, attr in graph.edges(data=True):
-        attr['node_id'] = {source, target}
-        attr['cross_ways'] = set()
-
     for source, target, attributes in graph.edges(data=True):
-        for id1, id2, attr in graph.edges(data=True):
-            if source == id1 and target == id2:
-                continue
-            if (attributes[merging_col] == attr[merging_col] and attributes[merging_col] != nodata) \
-                    and len(attributes['node_id'].intersection(attr['node_id'])):
-                attributes['node_id'] = attributes['node_id'].union(attr['node_id'])
-                attr['node_id'].clear()
-                edge_to_remove.append((id1, id2))
-            elif (attributes[merging_col] != attr[merging_col] or attributes[merging_col] == nodata) \
-                    and len(attributes['node_id'].intersection({id1, id2})):
-                if attr[merging_col] != nodata:
-                    attributes['cross_ways'].add(attr[merging_col])
-                else:
-                    attributes['cross_ways'].add(str(id1) + str(nodata) + str(id2))
+        attributes['node_id'] = {source, target}
+        attributes['cross_ways'] = set()
+        try:
+            for id1, id2, attr in graph.edges(data=True):
+                if source == id1 and target == id2:
+                    continue
+                if (attributes[merging_col] == attr[merging_col] and attributes[merging_col] != nodata) \
+                        and len(attributes['node_id'].intersection(attr['node_id'])):
+                    attributes['node_id'] = attributes['node_id'].union(attr['node_id'])
+                    attr['node_id'].clear()
+                    edge_to_remove.append((id1, id2))
+                elif (attributes[merging_col] != attr[merging_col] or attributes[merging_col] == nodata) \
+                        and len(attributes['node_id'].intersection({id1, id2})):
+                    if attr[merging_col] != nodata:
+                        attributes['cross_ways'].add(attr[merging_col])
+                    else:
+                        attributes['cross_ways'].add(str(id1) + str(nodata) + str(id2))
+        except:
+            continue
 
     graph.remove_edges_from(edge_to_remove)
 
@@ -537,7 +538,7 @@ def reverse_graph(graph):
                               for source, target, attr in graph.edges(data=True)])
 
     for node_id, attributes in new_graph.nodes(data=True):
-        for id, attr in new_graph.nodes(data=True):
+        for id in new_graph.nodes():
             if id in attributes['cross_ways']:
                 new_graph.add_edge(node_id, id)
 
