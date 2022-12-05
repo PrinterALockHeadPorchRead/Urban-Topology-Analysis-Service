@@ -552,15 +552,15 @@ def convert_to_df(graph, source='source', target='target'):
     return edges_df, nodes_df
 
 
-def get_reversed_graph(graph, source='source', target='target', merging_column='street_id', empty_cell_sign='-',
-                       edge_attr=['street_id']):
+def get_reversed_graph(graph, source='source', target='target', merging_column='way_id', empty_cell_sign='-',
+                       edge_attr=['way_id']):
     global nodata
     global merging_col
     nodata = empty_cell_sign
     merging_col = merging_column
 
     nx_graph = nx.from_pandas_edgelist(graph, source=source, target=target, edge_attr=edge_attr)
-    adjacency_df = nx.to_pandas_adjacency(nx_graph, weight=merging_column)
+    adjacency_df = nx.to_pandas_adjacency(nx_graph, weight=merging_column, dtype=int)
     union_and_delete(nx_graph)
 
     new_graph = reverse_graph(nx_graph)
