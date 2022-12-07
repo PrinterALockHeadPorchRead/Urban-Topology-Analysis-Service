@@ -1,12 +1,11 @@
 import {ChangeDetectorRef, Component, ElementRef, OnInit, ViewChild} from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Region, Town, _distBounds, _districts } from '../interfaces/town';
+import { Region, Town, _distBounds } from '../interfaces/town';
 import { FileService } from '../services/file.service';
 import { TownService } from '../services/town.service';
 import { GraphDataSrvice, GraphData, INode, Edge } from '../services/graph-data.service';
 
 import * as L from 'leaflet'; //* - все
-import { map, zip } from 'rxjs';
 
 enum sections{
   map = 'map',
@@ -18,15 +17,17 @@ enum sections{
 @Component({
   selector: 'app-town',
   templateUrl: './town.component.html',
-  styleUrls: ['./town.component.css']
+  styleUrls: ['./town.component.css', './loader.css']
 })
 export class TownComponent implements OnInit{
 
-  id?: string;
+  id?: number;
   town?: Town;
-  graphData?: GraphData;
+  RgraphData?: GraphData;
+  LgraphData?: GraphData;
   graphName = '';
-  roadBounds?: L.LatLngBounds;
+  // roadBounds?: L.LatLngBounds;
+  loading: boolean = false;
 
   private _section: sections = sections.map;
   set section(val: sections | string){
@@ -47,15 +48,16 @@ export class TownComponent implements OnInit{
     this.route.paramMap.subscribe(params=>{
       let id = params.get('id');
       if(id){
-        this.id=id;
+        this.id= Number(id);
         this.townService.getTown( id ).subscribe(
           town=>{
             this.town = town;
-            // if(town.districtFolder) 
             this.getDistricts(town);
           },
           error=>{this.router.navigate(['/towns'])}
         )
+      } else {
+        this.router.navigate(['/towns']);
       }
     })
   }
@@ -64,30 +66,123 @@ export class TownComponent implements OnInit{
 
   getCenter(): L.LatLngTuple{
     if(!this.town) return [59.9414, 30.3267];
-    return [ this.town.property.center.latitude, this.town.property.center.longitude ];
+    return [ this.town.property.c_latitude, this.town.property.c_longitude ];
   }
 
   getDistricts(town: Town): void{
-    zip(
-      ...[2, 1, 0].map(key => this.townService.getTownRegions(town.id, key))
-    ).subscribe(res => town.districts = {0: res[0], 1: res[1], 2: res[2]})
-    
+    this.townService.getTownRegions(town.id).subscribe(res => {
+      const levels: any = {};
+      res.forEach(value => {
+        if( !levels[value.admin_level] ) levels[value.admin_level] = [];
+
+        levels[value.admin_level].push(value);
+      })
+      town.districts = Object.keys(levels).map(key => levels[key]);
+    })
   }
 
-  handlePolygon(ev: {name: string, polygon: any}){
+  handlePolygon(ev: {name: string, regionId?: number, polygon?: any}){
+    if(!this.id) return;
     this.graphName = ev.name;
-    this.section = sections.graph;
-    this.roadBounds = (ev.polygon as L.Polygon)?.getBounds();
-    this.getGraphData();
+
+    if(ev.regionId){
+      this.loading = true;
+      this.cdRef.detectChanges();
+      this.townService.getGraphFromId(this.id, ev.regionId).subscribe(res => {
+        // console.log(res)
+        this.getRgraph(res.points_csv, res.edges_csv);
+        this.getLgraph(res.reversed_nodes_csv, res.reversed_edges_csv);
+        this.loading = false;
+        this.section = sections.graph;
+        this.cdRef.detectChanges();
+      })
+      return;
+    }
+    if(ev.polygon){
+      this.getGraphData(ev.polygon.getLatLngs()[0]);
+      return;
+    }
+    // this.roadBounds = (ev.polygon as L.Polygon)?.getBounds();
   }
   
-  getGraphData(){
-    zip(
-      this.fileService.readFile('/assets/graphs/nodes.csv').pipe(map(csvString => this.graphDataService.csv2object<INode>(csvString, ["node_id","lat","lon"]))),
-      this.fileService.readFile('/assets/graphs/graph.csv').pipe(map(csvString => this.graphDataService.csv2object<Edge>(csvString, ["from","to","street_name"])))
-    ).subscribe(values => {
-      this.graphData = {nodes: values[0], edges: values[1]}
-      this.cdRef.detectChanges(); // нужно для того, чтобы граф нормально отрисовался (без этого отрисовка происходит только после повтороного нажатия на карту)
-    });
+  getGraphData(nodes: L.LatLng[]){
+    if(!this.id) return;
+    const body: [number, number][] = nodes.map(node => [node.lat, node.lng]);
+    this.townService.getGraphFromBbox(this.id, body).subscribe(console.log);
+  }
+
+  getRgraph(nodes_str: string, edges_str: string){
+    const nodes: { [key: string]: INode } = {};
+    const edges: { [key: string]: Edge } = {};
+
+    const node_lines = nodes_str.split('\n')
+    node_lines.slice(1).forEach((line, index) => {
+      const [id, longitude, latitude] = line.split(',');
+      if(id){
+        nodes[Number(id)] = {
+          lat: Number(latitude),
+          lon: Number(longitude),
+          way_id: 0
+        }
+      }
+    })
+
+    const edge_lines = edges_str.split('\n')
+    edge_lines.slice(1).forEach((line, index) => {
+      const [id,id_way,source,target,name] = line.split(',');
+      if(id){
+        edges[Number(id)] = {
+          from: source,
+          to: target,
+          id: id,
+          way_id: id_way,
+          name: name
+        }
+      }
+    })
+
+    this.RgraphData = {
+      nodes: nodes,
+      edges: edges
+    }
+    // console.log(this.RgraphData)
+  }
+  
+  getLgraph(nodes_str: string, edges_str: string){
+    const nodes: { [key: string]: INode } = {};
+    const edges: { [key: string]: Edge } = {};
+
+    const names = this.RgraphData ? Object.values(this.RgraphData.edges).map(edge => ({id: edge.way_id, name: edge.name}) ) : [];
+
+    const node_lines = nodes_str.split('\n')
+    node_lines.slice(1).forEach((line, index) => {
+      // const [id_way, node_id, cross_ways] = line.split(',\\');
+      const id_way = line.split(',"')[0];
+      if(id_way){
+        nodes[index] = {
+          lat: 0,
+          lon: 0,
+          way_id: Number(id_way),
+          name: names.find(n => n.id == id_way)?.name
+        }
+      }
+    })
+
+    const edge_lines = edges_str.split('\n')
+    edge_lines.slice(1).forEach((line, index) => {
+      const [source_way,target_way] = line.split(',');
+      if(source_way){
+        edges[index] = {
+          from: source_way,
+          to: target_way,
+          id: index.toString(),
+        }
+      }
+    })
+
+    this.LgraphData = {
+      nodes: nodes,
+      edges: edges
+    }
   }
 }

@@ -1,27 +1,31 @@
-<div class="wrapper">
+<div class="wrapper" [ngClass]="{'loading': loading}">
     <div class="mapWrapper">
         <a name="map"></a>
         <ng-container *ngIf="town">
             <app-map 
                 class="map" 
                 [center]="getCenter()" 
-                [cityFeatures]="town.districts"
+                [regions]="town.districts"
                 (graphInfo)="handlePolygon($event)" 
             ></app-map> <!-- handlePolygon($event) вызывается при изменении graphInfo и реагирует на изменение. getCenter() вызывается при отрисовке блока и присваивает значение center-->
         </ng-container>
     </div>
     <div class="graphWrapper">
         <a name="graph"></a>
-        <app-graph *ngIf="graphData" [graphData]="graphData" [name]="graphName"></app-graph>
+        <app-graph *ngIf="LgraphData" [graphData]="LgraphData" [name]="graphName" [loading]="loading"></app-graph>
     </div>
     <div class="roadsWrapper">
         <a name="roads"></a>
-        <app-roads *ngIf="graphData" [graphData]="graphData" ></app-roads>
+        <app-roads *ngIf="RgraphData" [graphData]="RgraphData" [loading]="loading"></app-roads>
     </div>
 
     <div class="nav">
         <button title="Map" [ngClass]="{'active': section == 'map'}" (click)="section = 'map'"></button>
-        <button title="Graph" [ngClass]="{'active': section == 'graph'}" (click)="section = 'graph'" [disabled]="!graphData"></button>
-        <button title="Roads" [ngClass]="{'active': section == 'roads'}" (click)="section = 'roads'" [disabled]="!graphData"></button>
+        <button title="Graph" [ngClass]="{'active': section == 'graph'}" (click)="section = 'graph'" [disabled]="!LgraphData"></button>
+        <button title="Roads" [ngClass]="{'active': section == 'roads'}" (click)="section = 'roads'" [disabled]="!RgraphData"></button>
     </div>
+</div>
+
+<div *ngIf="loading" class="overlay">
+    <div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div>
 </div>

@@ -1,8 +1,19 @@
 import { Injectable } from '@angular/core';
 import {HttpClient, HttpHeaders} from '@angular/common/http'
-import { districtLevels, Region, Town } from '../interfaces/town';
+import { Region, Town } from '../interfaces/town';
 import { Observable, of, throwError } from 'rxjs';
 import { host } from 'src/environments/environment';
+
+
+interface csv_result{
+  edges_csv: string,
+  points_csv: string,
+  points_properties_csv: string,
+
+  reversed_edges_csv: string,
+  reversed_nodes_csv: string,
+  ways_properties_csv: string,
+}
 
 @Injectable({
   providedIn: 'root'
@@ -33,19 +44,27 @@ export class TownService {
     return this.http.get<Town>(`${host}/city/?city_id=${id}`, this.getHttpOptions());
   }
 
-  downloadTown(id: string, extension: number = 0): Observable<Town>{
+  // downloadTown(id: string, extension: number = 0): Observable<Town>{
     
-    return this.http.get<Town>(`${host}/download/city/?city_id=${id}&extension=${extension}`, this.getHttpOptions());
+  //   return this.http.get<Town>(`${host}/download/city/?city_id=${id}&extension=${extension}`, this.getHttpOptions());
+  // }
+
+  // deleteTown(id: string): Observable<Town>{
+    
+  //   return this.http.get<Town>(`${host}/delete/city/?city_id=${id}`, this.getHttpOptions());
+  // }
+
+  getTownRegions(id: number): Observable<Region[]>{
+    
+    return this.http.get<Region[]>(`${host}/regions/city/?city_id=${id}`, this.getHttpOptions());
   }
 
-  deleteTown(id: string): Observable<Town>{
-    
-    return this.http.get<Town>(`${host}/delete/city/?city_id=${id}`, this.getHttpOptions());
+  getGraphFromBbox(id: number, nodes: [number, number][]){
+    return this.http.post(`${host}/city/graph/bbox/${id}`, [nodes], this.getHttpOptions());
   }
-
-  getTownRegions(id: number, depth: districtLevels = districtLevels.city): Observable<Region[]>{
-    
-    return this.http.get<Region[]>(`${host}/regions/city/?city_id=${id}&depth=${depth}`, this.getHttpOptions());
+  getGraphFromId(id: number, regionId: number){
+    const body = [regionId];
+    return this.http.post<csv_result>(`${host}/city/graph/region/?city_id=${id}`, body, this.getHttpOptions());
   }
 }
 

@@ -5,11 +5,11 @@ export interface townBounds{
     minlon: string
 }
 
-export enum districtLevels{
-  city = 0,
-  children = 1,
-  subchildren = 2,
-}
+// export enum districtLevels{
+//   city = 4,
+//   children = 5,
+//   subchildren = 8,
+// }
 
 export interface _center{
   lat: number,
@@ -41,14 +41,9 @@ export interface _district{
     features: _district[]
   }
 
-export type _districts = {
-  [key in districtLevels]: Region[]
-
-}
-
 export interface Region{
   id: number,
-  depth: districtLevels,
+  admin_level: number,
   name: string,
   type: 'Polygon'
   regions: _coordinates
@@ -61,21 +56,11 @@ export interface Town{
   property: {
     population: number,
     population_density: number,
-    center: {
-      longitude: number,
-      latitude: number
-  },
+    c_longitude: number,
+    c_latitude: number,
     time_zone: string,
     time_created: string
   },
   downloaded: boolean,
-    // id: string,
-    // name: string,
-    // map?: any,
-    // file?: string,
-    // districtFolder?: string,
-    // image?: string,
-    // bounds?: townBounds,
-    // center: _center,
-    districts: _districts
+  districts: Region[][]
 }

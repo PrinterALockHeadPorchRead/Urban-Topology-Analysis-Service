@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnInit, Output} from '@angular/core';
 import * as L from 'leaflet';
-import { _district, _districts, _coordinates, districtLevels } from '../interfaces/town';
+import { _district, _coordinates, Region } from '../interfaces/town';
 import { GeoJsonObject } from 'geojson';
 
 @Component({
@@ -11,13 +11,16 @@ import { GeoJsonObject } from 'geojson';
 export class MapComponent implements OnInit {
   map?: L.Map;
   minZoom = 9;
-  districtLevel = districtLevels.subchildren;
+  districtLevel = 0;
+
+  clearTools?: any; // кнопка очистки карты 
   graphTools?: any; // кнопки выбора способа выбора полигонов
   distLOD?: any; //ползунок с изменением степени дробления районов
 
   markers = new L.LayerGroup<L.Marker>([]);
   districts = new L.LayerGroup<L.Polygon>([]);
   polyline =  new L.Polyline([], {color: '#830000', weight: 3});
+  tools = new L.LayerGroup([]);
 
   onClickHandler?: (ev: any) => void; //переменная типа функция 
   markerIcon = L.divIcon({className: 'point'}); //встроенная функция L создающая шаблон иконки маркера со стилем point
@@ -32,7 +35,7 @@ export class MapComponent implements OnInit {
           } as L.TileLayerOptions),
           this.markers, 
           this.districts, 
-          this.polyline
+          this.polyline,
         ] as L.Layer[],
       zoom: this.minZoom,
       minZoom: this.minZoom,
@@ -41,7 +44,14 @@ export class MapComponent implements OnInit {
   } 
   get center(): L.LatLngTuple{return this._center;}
 
-  @Input() cityFeatures: _districts = {0: [], 1: [], 2: [] }
+  @Input() set regions(value: Region[][]){
+    if(!value) return;
+    this.cityFeatures = value;
+    if(this.map) this.setTools(this.map, {levels: value.length})
+    this.drawDistricts(this.districtLevel);
+  }
+
+  cityFeatures: Region[][] = [];
 
 
   manualPolygonsMode: boolean = false; //true - задаем районы в ручную false-смотрим на имеющиеся
@@ -63,7 +73,7 @@ export class MapComponent implements OnInit {
     fillOpacity: 0.1
   }
 
-  @Output() graphInfo = new EventEmitter<{name: string, polygon: any}>();
+  @Output() graphInfo = new EventEmitter<{name: string, polygon?: any, regionId?: number}>();
 
   constructor() { }
 
@@ -117,7 +127,7 @@ export class MapComponent implements OnInit {
         const layers = this.markers.getLayers();
         if(layers.length < 3) return;
         if(this.markers.getLayerId(layers[0]) == this.markers.getLayerId(ev.target)){
-          if(this.polyline.getLatLngs().length) this.addPolygon(layers.map(l => (l as L.Marker).getLatLng()), 'Your polygon');
+          if(this.polyline.getLatLngs().length) this.addPolygon(layers.map(l => (l as L.Marker).getLatLng()));
           this.polyline.setLatLngs([]);
         }
       })
@@ -127,7 +137,7 @@ export class MapComponent implements OnInit {
         const layers = this.markers.getLayers();
         if(layers.length>2 && this.polyline.getLatLngs().length==0){ 
           this.districts.clearLayers();
-          this.addPolygon(layers.map(l => (l as L.Marker).getLatLng()), 'Your polygon');}
+          this.addPolygon(layers.map(l => (l as L.Marker).getLatLng()));}
         else setPolyline();
 
       })
@@ -167,7 +177,7 @@ export class MapComponent implements OnInit {
     this.drawDistricts(this.districtLevel);
   }
 
-  drawDistricts(depth: districtLevels){
+  drawDistricts(depth: number){
 
     this.districts.clearLayers();
 
@@ -192,13 +202,11 @@ export class MapComponent implements OnInit {
   getPopup(name?: string){
     return (layer: L.Layer) => {
       const container = document.createElement('div'); //создание div
-      container.innerHTML = `<h3>${name}</h3>`;
+      container.innerHTML = `<h3>${name ? name : 'Your polygon'}</h3>`;
       const button = document.createElement('button'); //создание кнопки
       button.classList.add('polygonInfo'); //class в css
       button.innerText = 'Get info';
-      button.onclick = (ev: MouseEvent) => {
-        this.getPolygonInfo(name ? name  : 'Your polygon', layer);
-      }; //переход от карты к графам
+      button.onclick = (ev: MouseEvent) => name ? this.getRegionInfo(name, (layer as any).feature.properties.osm_id) : this.getPolygonInfo('Your polygon', layer); //переход от карты к графам
       container.appendChild(button);
       return container;
     }
@@ -234,28 +242,39 @@ export class MapComponent implements OnInit {
     this.bindEvents(polygon);
   }
 
+  getRegionInfo(name:string, id: number){
+    this.graphInfo.emit({name: name, regionId: id}); //выстреливает значение в handlePolygon в town.component
+  }
+
   getPolygonInfo(name:string, polygon: any){
     this.graphInfo.emit({name: name, polygon: polygon}); //выстреливает значение в handlePolygon в town.component
   }
 
-  setTools(map: L.Map){
+  setTools(map: L.Map, options?: {levels: number}){
+    this.clearTools?.remove();
+    this.graphTools?.remove();
+    this.distLOD?.remove();
+
     const clearTools = ClearMap(() => {
       this.clearMap();
       this.graphTools?.enable();
       this.distLOD?.hide();
     })
-    new clearTools().addTo(map);
+    this.clearTools = new clearTools().addTo(map);
 
     const graphTools = PolygonMode(() => this.onManualPolygons(), () => this.onDistrictPolygons()) //класс (по конструктору класса)
     this.graphTools = new graphTools().addTo(map); //экземпляр класса
 
-    const level = Object.keys(districtLevels).findIndex(key => Number(key) == this.districtLevel);
-    const distLOD = LODControl((ev: any) => {
-      const value = ev.target.value ? ev.target.value : 0;
-      this.districtLevel = value as districtLevels;
-      this.drawDistricts(this.districtLevel );
-    }, level, 3);
-    this.distLOD = new distLOD().addTo(map);
+    
+    if(options?.levels){
+      const level = this.districtLevel;
+      const distLOD = LODControl((ev: any) => {
+        const value = ev.target.value ? Number(ev.target.value) : 0;
+        this.districtLevel = value;
+        this.drawDistricts(this.districtLevel);
+      }, level, this.cityFeatures.length);
+      this.distLOD = new distLOD().addTo(map);
+    }
   }
 }
 
