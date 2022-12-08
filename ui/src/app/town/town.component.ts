@@ -107,7 +107,7 @@ export class TownComponent implements OnInit{
   
   getGraphData(nodes: L.LatLng[]){
     if(!this.id) return;
-    const body: [number, number][] = nodes.map(node => [node.lat, node.lng]);
+    const body: [number, number][] = nodes.map(node => [node.lng, node.lat]);
     this.townService.getGraphFromBbox(this.id, body).subscribe(console.log);
   }
 
