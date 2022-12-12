@@ -11,7 +11,7 @@ import { TownService } from '../services/town.service';
 })
 export class CityListComponent implements OnInit {
   page = 0;
-  per_page = 99;
+  per_page = 1000;
   noMoreCities = false;
 
   towns: Town[] = [];
