@@ -1,0 +1,5 @@
+*node_modules
+*.angular
+__pycache__
+logs
+package-lock.json
