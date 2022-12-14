@@ -2,9 +2,11 @@ import { ChangeDetectorRef, Component, Input, OnInit } from '@angular/core';
 import { SearchService } from '../services/search.service';
 import { GraphData } from '../services/graph-data.service';
 import iwanthue from 'iwanthue';
+import Pallete from 'iwanthue/palette';
 import { saveText } from '../graph/saveAsPNG';
 import * as L from 'leaflet';
 import 'leaflet-easyprint';
+
 
 @Component({
   selector: 'app-roads',
@@ -20,7 +22,7 @@ export class RoadsComponent implements OnInit {
   }
   get graphData(){ return this._gd }
 
-  loading: boolean = false;
+  @Input() loading: boolean = false;
   printControl: any;
   // gds?: L.GeoJSON;
 
@@ -50,22 +52,22 @@ export class RoadsComponent implements OnInit {
     if(!this.map) return;
     this.roads.clearLayers();
 
-    gd.nodes.forEach(node => {
-      L.marker([ Number(node.lat), Number(node.lon)], {icon: this.markerIcon}).addTo(this.roads);
+    let roads: { [key: string]: L.Polyline} = {};
+
+    Object.values(gd.edges).forEach(edge => {
+      if(edge.way_id)
+      if(!roads[edge.way_id]) {
+        roads[edge.way_id] = L.polyline([
+          [gd.nodes[edge.from].lat, gd.nodes[edge.from].lon],
+          [gd.nodes[edge.to].lat, gd.nodes[edge.to].lon], 
+        ], {color: iwanthue(1, {seed: edge.way_id})[0], weight: 4}
+        ).bindTooltip(edge.name || 'null').addTo(this.roads);
+      } else {
+        roads[edge.way_id].addLatLng([gd.nodes[edge.from].lat, gd.nodes[edge.from].lon]);
+        roads[edge.way_id].addLatLng([gd.nodes[edge.to].lat, gd.nodes[edge.to].lon]);
+      }
     })
 
-    const pallete = iwanthue(gd.edges.length, {seed: 'someFunnySeed'});
-    gd.edges.forEach((edge, index) => {
-      const fromNode = gd.nodes.find(n => n.node_id == edge.from);
-      const toNode = gd.nodes.find(n => n.node_id == edge.to);
-      if(!(fromNode && toNode)) return;
-
-      L.polyline([
-        [Number(fromNode.lat), Number(fromNode.lon)], 
-        [Number(toNode.lat), Number(toNode.lon)]
-      ], {color: pallete[index], weight: 7}).bindTooltip(edge.street_name).addTo(this.roads);
-    })
-    
     this.map.fitBounds(this.roads.getBounds());
   }
 

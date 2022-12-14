@@ -2,11 +2,12 @@ import { Component, OnInit, ViewChild, AfterViewInit, ElementRef, OnDestroy, Inp
 import { FileService } from '../services/file.service';
 import { FormControl } from '@angular/forms';
 import {density, diameter, simpleSize} from 'graphology-metrics/graph';
-import { tap, zip } from 'rxjs';
 import Sigma from "sigma";
 import Graph from 'graphology';
 import iwanthue from "iwanthue";
+
 import forceAtlas2 from 'graphology-layout-forceatlas2';
+
 import circular from "graphology-layout/circular";
 import {AbstractGraph} from 'graphology-types';
 import saveAs from './saveAsPNG';
@@ -25,7 +26,7 @@ export class GraphComponent implements OnInit, AfterViewInit {
   @Input() name?: string;
 
   @Input() graphData?: GraphData;
-
+  @Input() loading: boolean = false;
   metrics?: {density: number, diameter: number, simpleSize: number};
 
   graph!: AbstractGraph;
@@ -35,36 +36,29 @@ export class GraphComponent implements OnInit, AfterViewInit {
 
   constructor(
     private cdRef: ChangeDetectorRef,
-    private gdService: GraphDataSrvice,
-    private fileService: FileService,
   ) {
-    // this.graph = Graph.from(data as SerializedGraph);
-    // this.graph = Graph.from(smallGraph as SerializedGraph);
-    // this.palette = iwanthue(smallGraph.nodes.length, { seed: "eurSISCountryClusters" });
   }
 
   ngOnInit(): void {
   }
 
   ngAfterViewInit(): void {
-    this.fileService.readFile('/assets/graphs/MurinoLO-4_graphml (1).graphml').subscribe(res => {
-      this.graph = graphml.parse(Graphology, res);
-      this.setAttributes();
-      this.render();
-      this.getMetrics();
-    });
-    // this.graph = new Graph();
-    // if(!this.graphData) return;
+    // this.fileService.readFile('/assets/graphs/MurinoLO-4_graphml (1).graphml').subscribe(res => {
+    //   // this.graph = graphml.parse(Graphology, res);
+    //   this.setAttributes();
+    //   this.render();
+    //   this.getMetrics();
+    // });
+    this.graph = new Graph();
+    if(!this.graphData) return;
 
-    // const inters = this.gdService.streetsToIntersections(this.graphData);
+    Object.values(this.graphData.nodes).forEach(node => this.graph.addNode(node.way_id, {label: node.name, x: Number(node.lat), y: Number(node.lon), size: 5, way_id: node.way_id}));
+    Object.values(this.graphData.edges).forEach(edge => this.graph.addEdge(edge.from, edge.to, {size: 5}));
 
+    this.getMetrics();
+    this.setAttributes();
 
-    // inters.nodes.forEach(node => this.graph.addNode(node.node_id, {x: Number(node.lat), y: Number(node.lon), size: 5}));
-    // inters.edges.forEach(edge => this.graph.addEdge(edge.from, edge.to, {label: edge.street_name, size: 5}));
-
-    // this.getMetrics();
-
-    // this.render();
+    this.render();
   }
 
   getMetrics(){
@@ -79,21 +73,11 @@ export class GraphComponent implements OnInit, AfterViewInit {
   setAttributes(){
     const nodes = this.graph.nodes();
 
-    this.palette = iwanthue(this.graph.nodes().length, { seed: "eurSISCountryClusters" });
-
-    this.graph.nodes().forEach((node, i) => {
-      const angle = (i * 2 * Math.PI) / this.graph.order;
-      this.graph.setNodeAttribute(node, "x", nodes.length * Math.cos(angle));
-      this.graph.setNodeAttribute(node, "y", nodes.length * Math.sin(angle));
-      
+    this.graph.forEachNode((node, attrs) => {
       // const size = Math.sqrt(this.graph.degree(node)) / 2;
-      const size = this.graph.degree(node) / nodes.length * 100;
-      this.graph.setNodeAttribute(node, "size", size > 5 ? size : 5);
-
-      this.graph.setNodeAttribute(node, "color", this.palette.pop());
-
-      const label = this.graph.getNodeAttribute(node, 'name');
-      this.graph.setNodeAttribute(node, "label", label);
+      const size = this.graph.degree(node);
+      attrs['size'] = size > 5 ? (size < 10 ? size : 10) : 5;
+      attrs['color'] = iwanthue(1, {seed: attrs['way_id']})[0];
     });
 
     this.graph.forEachEdge((edge, attrs: any) => {
@@ -104,25 +88,11 @@ export class GraphComponent implements OnInit, AfterViewInit {
   
   render(){
     if(!this.graph) return;
-
-    // const degrees = this.graph.nodes().map((node) => this.graph.degree(node));
-    // const minDegree = Math.min(...degrees);
-    // const maxDegree = Math.max(...degrees);
-    // const minSize = 2, maxSize = 10;
-    // this.graph.forEachNode((node) => {
-    //   const degree = this.graph.degree(node);
-    //   this.graph.setNodeAttribute(
-    //     node,
-    //     "size",
-    //     minSize +((degree - minDegree) / (maxDegree - minDegree)) * (maxSize - minSize)
-    //   );
-    // });
-
     circular.assign(this.graph);
     forceAtlas2.assign(this.graph, { settings: forceAtlas2.inferSettings(this.graph),  iterations: 600 });
-    // this.forceLayout = new ForceSupervisor(this.graph, {settings: {repulsion: 1, inertia: 0.3}});
-    // this.forceLayout = new FA2Layout(graph, {settings: forceAtlas2.inferSettings(this.graph)});
-    // this.forceLayout?.start();
+    // let forceLayout = new ForceSupervisor(this.graph, {settings: });
+    // let forceLayout = new FA2Layout(this.graph, {settings: forceAtlas2.inferSettings(this.graph)});
+    // forceLayout.start();
 
 
     this.renderer = new Sigma(this.graph as any, this.container.nativeElement,  {renderEdgeLabels: true, renderLabels: true});

@@ -41,13 +41,55 @@ form.search button:hover{
     border: 1px solid #777777;
     overflow: hidden;
     text-decoration: none;
-    color: black;
+    color: black;position: relative;
+}
+
+.town .downloaded{
+    position: absolute;
+    top: -0.75em;
+    right: -1em;
+    width: 1.7em;
+    height: 1.5em;
+    border-radius: 0.5em;
+    border: 1px solid #777777;
+    background: #ffffff;
+    text-align: center;
+}
+
+.downloaded .tooltip{
+    border: 1px solid black;
+    background: rgba(0, 0, 0, 0.5);
+    text-align: center;
+    white-space: nowrap;
+    color: white;
+    border-radius: 2px;
+    padding: 0.2em;
+    
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: min-content;
+
+    z-index: 999;
+    /* display: none; */
+    visibility: hidden;
+    transition: opacity 100ms ease-in-out ;
+    opacity: 0;
+}
+
+.downloaded:hover .tooltip{
+    /* display: block; */
+    visibility: visible;
+    opacity: 1;
 }
 
 .town .image{
     height: 250px;
     background: #eeeeee;
+    border-radius: 10px 10px 0 0;
+    overflow: hidden;
 }
+
 
 .town .image img{
     width: 100%;

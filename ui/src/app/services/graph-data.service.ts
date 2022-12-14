@@ -5,18 +5,25 @@ import Graph from "graphology";
 export interface Edge{
   from: string,
   to: string,
-  street_name: string
+  name?: string,
+  way_id?: string,
+  id?: string
 }
 
 export interface INode{
-    node_id: string,
-    lat: string,
-    lon: string
+    lat: number,
+    lon: number,
+    way_id: number,
+    name?: string
 }
 
 export interface GraphData{
-  nodes: INode[],
-  edges: Edge[]
+  nodes: {
+    [key: string]: INode
+  },
+  edges: {
+    [key: string]: Edge
+  }
 }
 
 @Injectable({providedIn: 'root'})

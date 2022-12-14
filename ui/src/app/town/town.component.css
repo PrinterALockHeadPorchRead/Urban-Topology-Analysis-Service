@@ -5,6 +5,11 @@
     /* padding-right: 64px; */
 }
 
+.wrapper.loading{
+    pointer-events: none;
+    cursor: not-allowed;
+}
+
 .mapWrapper{
     height: calc(100vh - 64px);
     width: 100vw;
@@ -42,4 +47,19 @@
 .nav button:disabled{
     border-color: gray;
     background: rgba(105, 105, 105, 0.478);
+}
+
+.overlay{
+    pointer-events: none;
+    position: fixed;
+    top:0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 999;
+    backdrop-filter: blur(5px);
+    cursor: auto;
 }

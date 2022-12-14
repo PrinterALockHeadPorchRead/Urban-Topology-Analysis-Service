@@ -11,7 +11,7 @@ import { TownService } from '../services/town.service';
 })
 export class CityListComponent implements OnInit {
   page = 0;
-  per_page = 99;
+  per_page = 1000;
   noMoreCities = false;
 
   towns: Town[] = [];
@@ -36,10 +36,10 @@ export class CityListComponent implements OnInit {
     });
   }
 
-  getImage(center: {longitude: number,latitude: number}): string{
+  getImage(longitude: number, latitude: number): string{
     const zoom = 10;
 
-    return `http://static-maps.yandex.ru/1.x/?lang=en-US&ll=${center.longitude},${center.latitude}&size=450,450&z=${zoom}&l=map`
+    return `http://static-maps.yandex.ru/1.x/?lang=en-US&ll=${longitude},${latitude}&size=450,450&z=${zoom}&l=map`
   }
 
   onLoadMore(){
