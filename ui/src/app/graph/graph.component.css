@@ -47,22 +47,40 @@
     width: 100%;
 }
 
-.row > *:not(:hover)~label {
-    display: none;
+.row.buttons{
+    display: inline-flex;
+    gap: 0.5em;
+    padding: 0 1.5em;
 }
-.row label {
-    position: absolute;
-    /* top: 100%; */
-    left: 50%;
-    transform: translateX(-50%);
-    background: black;
-    color: white;
-    padding: 0.2em;
-    border-radius: 2px;
-    margin-top: 0.3em;
-    font-size: 0.8em;
+
+.row.buttons button{
+    position: relative;
+}
+
+.row.buttons button:hover > label{
+    visibility: visible;
+    opacity: 1;
+}
+
+.row.buttons button > label{
+    border: 1px solid black;
+    background: rgba(0, 0, 0, 0.5);
+    text-align: center;
     white-space: nowrap;
-    z-index: 3;
+    color: white;
+    border-radius: 2px;
+    padding: 0.2em;
+    top: -100%;
+    position: absolute;
+    left: 50%;
+    transform: translate(-50%, 0);
+    width: min-content;
+
+    z-index: 999;
+    /* display: none; */
+    visibility: hidden;
+    transition: opacity 100ms ease-in-out ;
+    opacity: 0;
 }
 .input button {
     width: 2.5em;
