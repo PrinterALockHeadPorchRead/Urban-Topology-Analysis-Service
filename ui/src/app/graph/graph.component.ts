@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, AfterViewInit, ElementRef, OnDestroy, Input, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, ViewChild, AfterViewInit, ElementRef, OnDestroy, Input, ChangeDetectorRef, Output, EventEmitter } from '@angular/core';
 import { FileService } from '../services/file.service';
 import { FormControl } from '@angular/forms';
 import {density, diameter, simpleSize} from 'graphology-metrics/graph';
@@ -21,7 +21,7 @@ var Graphology = require('graphology');
   templateUrl: './graph.component.html',
   styleUrls: ['./graph.component.css']
 })
-export class GraphComponent implements OnInit, AfterViewInit {
+export class GraphComponent implements OnInit, AfterViewInit, OnDestroy {
   @ViewChild('sigmaContainer') container!: ElementRef;
   @Input() name?: string;
 
@@ -34,12 +34,19 @@ export class GraphComponent implements OnInit, AfterViewInit {
   palette: string[] = [];
   labelsThreshold = new FormControl<number>(0);
 
+  @Output() downloadLgraph = new EventEmitter();
+
   constructor(
     private cdRef: ChangeDetectorRef,
   ) {
   }
 
   ngOnInit(): void {
+  }
+
+  ngOnDestroy(): void {
+    this.renderer?.kill();
+    this.container?.nativeElement?.remove();
   }
 
   ngAfterViewInit(): void {
@@ -52,7 +59,9 @@ export class GraphComponent implements OnInit, AfterViewInit {
     this.graph = new Graph();
     if(!this.graphData) return;
 
-    Object.values(this.graphData.nodes).forEach(node => this.graph.addNode(node.way_id, {label: node.name, x: Number(node.lat), y: Number(node.lon), size: 5, way_id: node.way_id}));
+    Object.values(this.graphData.nodes).forEach(node => {
+      if(node) this.graph.addNode(node.way_id, {label: node.name, x: Number(node.lat), y: Number(node.lon), size: 5, way_id: node.way_id})
+    });
     Object.values(this.graphData.edges).forEach(edge => this.graph.addEdge(edge.from, edge.to, {size: 5}));
 
     this.getMetrics();
@@ -106,8 +115,10 @@ export class GraphComponent implements OnInit, AfterViewInit {
   }
 
 
-  onSaveAs(type: 'png' | 'svg'){
+  onSaveAs(type: 'png' | 'svg' | 'csv'){
     if(!this.renderer) return;
+
+    if(type == 'csv') return this.downloadLgraph.emit();
 
     const layers = ["edges", "nodes", "labels"];  
     saveAs( type, this.renderer, layers);

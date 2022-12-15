@@ -15,9 +15,9 @@ import * as svg from 'svgcanvas';
  */
 
 
- type SaveTextType = 'application/xml' | 'application/json' | 'image/svg+xml';
+ type SaveTextType = 'application/xml' | 'application/json' | 'image/svg+xml' | 'text/csv';
 
- export function saveText(name: string, text: string, type: SaveTextType) {
+export function saveText(name: string, text: string, type: SaveTextType) {
   const blob = new Blob([text], {type: `${type};charset=utf-8`});
   FileSaver.saveAs(blob, name);
 }

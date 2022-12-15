@@ -5,7 +5,7 @@ import { Observable, of, throwError } from 'rxjs';
 import { host } from 'src/environments/environment';
 
 
-interface csv_result{
+export interface csv_result{
   edges_csv: string,
   points_csv: string,
   points_properties_csv: string,
@@ -60,7 +60,7 @@ export class TownService {
   }
 
   getGraphFromBbox(id: number, nodes: [number, number][]){
-    return this.http.post(`${host}/city/graph/bbox/${id}`, [nodes], this.getHttpOptions());
+    return this.http.post<csv_result>(`${host}/city/graph/bbox/${id}`, [nodes], this.getHttpOptions());
   }
   getGraphFromId(id: number, regionId: number){
     const body = [regionId];

@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, Input, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { SearchService } from '../services/search.service';
 import { GraphData } from '../services/graph-data.service';
 import iwanthue from 'iwanthue';
@@ -27,6 +27,8 @@ export class RoadsComponent implements OnInit {
   // gds?: L.GeoJSON;
 
   roads = new L.FeatureGroup([]);
+
+  @Output() downloadRgraph = new EventEmitter();
 
   map?: L.Map;
   options: L.MapOptions = {
@@ -78,17 +80,20 @@ export class RoadsComponent implements OnInit {
         (document.getElementsByClassName('leaflet-overlay-pane')[1].lastChild as any).outerHTML,
         'image/svg+xml'
       )
-    });
+    }, 'Export as .png');
     new exportMap().addTo(map);
+
+    const exportAsCsv = ExportMap(() => this.downloadRgraph.emit(), 'Export as .csv');
+    new exportAsCsv().addTo(map);
   }
 
 }
 
-export const ExportMap = (mainFn: (ev: any) => void) => L.Control.extend({
+export const ExportMap = (mainFn: (ev: any) => void, name: string) => L.Control.extend({
   options: {
 		position: 'topleft',
 		clearText: '<span class="material-symbols-outlined" style="line-height: inherit;">save_alt</span>',
-		clearTitle: 'Export as .png',
+		clearTitle: name,
 	},
   onAdd(map: L.Map) {
 		const polymodename = 'leaflet-control-export', container = L.DomUtil.create('div', `${polymodename} leaflet-bar`), options = this.options;

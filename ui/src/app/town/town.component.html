@@ -12,11 +12,11 @@
     </div>
     <div class="graphWrapper">
         <a name="graph"></a>
-        <app-graph *ngIf="LgraphData" [graphData]="LgraphData" [name]="graphName" [loading]="loading"></app-graph>
+        <app-graph *ngIf="LgraphData" [graphData]="LgraphData" [name]="graphName" [loading]="loading" (downloadLgraph)="handleDownload('l')"></app-graph>
     </div>
     <div class="roadsWrapper">
         <a name="roads"></a>
-        <app-roads *ngIf="RgraphData" [graphData]="RgraphData" [loading]="loading"></app-roads>
+        <app-roads *ngIf="RgraphData" [graphData]="RgraphData" [loading]="loading" (downloadRgraph)="handleDownload('r')"></app-roads>
     </div>
 
     <div class="nav">

@@ -39,7 +39,7 @@ form.search button:hover{
     border-radius: 10px;
     /* box-shadow: 4px 4px 8px 0px rgba(34, 60, 80, 0.2); */
     border: 1px solid #777777;
-    overflow: hidden;
+    /* overflow: hidden; */
     text-decoration: none;
     color: black;position: relative;
 }
