@@ -4,8 +4,9 @@
     width: 100%;
     overflow: hidden;
     padding: 0 16px;
-    background: #554994;
+    border-bottom: 1px solid silver;
     align-items: center;
+    background-color: rgb(216, 214, 214, 0.12);
 }
 
 .logo{
@@ -15,9 +16,19 @@
 }
 .logo a{
     text-decoration: none;
-    color: white;
+    color: black;
+    font-weight: 600;
+    font-style: italic;
+    margin-left: 20px;
+    margin-top: 10px;
+    margin-bottom: 10px;
 }
 
 .spacer{
     flex: 1 1 auto;
+}
+
+.img-logo {
+    display: flex;
+    align-items: flex-end;
 }

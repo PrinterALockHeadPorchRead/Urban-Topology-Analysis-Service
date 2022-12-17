@@ -1,48 +1,4 @@
-form.search{
-    width: 100%;
-    display: flex;
-    justify-content: center;
-}
-form.search input{
-    border: 0;
-    border-bottom: 1px solid black;
-    flex: 0 0 30%;
-    min-width: 300px;
-    outline: 0;
-    font-size: 1.5em;
-}
-form.search button{
-    background-color: transparent;
-    border: 0;
-    border-radius: 50%;
-    cursor: pointer;
-    transition: background-color 200ms;
-    flex: 0 0 31px;
-    height: 31px;
-    padding: 0;
-}
-form.search button:hover{
-    background-color: rgba(85, 73, 148, 0.05);
-}
 
-.townList{
-    width: 100%;
-    display: flex;
-    gap: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-.town{
-    flex: 0 0 30%;
-    min-width: 300px;
-    display: block;
-    border-radius: 10px;
-    /* box-shadow: 4px 4px 8px 0px rgba(34, 60, 80, 0.2); */
-    border: 1px solid #777777;
-    /* overflow: hidden; */
-    text-decoration: none;
-    color: black;position: relative;
-}
 
 .town .downloaded{
     position: absolute;
@@ -83,13 +39,86 @@ form.search button:hover{
     opacity: 1;
 }
 
+form.search{
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+form.search input{
+    border: 0;
+    border-bottom: 1px solid black;
+    flex: 0 0 30%;
+    min-width: 300px;
+    outline: 0;
+    font-size: 1.2em;
+    transition: all 0.2s;
+    font-weight: normal;
+    padding-left: 5px;
+}
+form.search button{
+    background-color: transparent;
+    border: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 200ms;
+    flex: 0 0 40px;
+    height: 40px;
+    padding: 0;
+    padding-top: 2px;
+}
+form.search button:hover{
+    background-color: rgba(85, 73, 148, 0.05);
+}
+
+form.search input:focus {
+    color: black;
+    border-bottom: solid 1px #2b6eff;
+    font-weight: normal;
+}
+
+.search {
+    position: sticky;
+    top: 0;
+    z-index: 999;
+    width: 100%;
+    background-color: white;
+    padding: 15px;
+    /* padding-bottom: 35px; */
+    border-bottom: 1px solid silver;
+    opacity: 0.8;
+}
+
+.townList{
+    margin-top: 10px;
+    width: 100%;
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 1200px;
+    margin: auto;
+}
+.town{
+    flex: 0 0 30%;
+    min-width: 300px;
+    display: block;
+    border-radius: 10px;
+    /* box-shadow: 4px 4px 8px 0px rgba(34, 60, 80, 0.2); */
+    border: 1px solid #777777;
+    /* overflow: hidden; */
+    text-decoration: none;
+    color: black;position: relative;
+}
+
+.town:hover {
+    box-shadow: 0px 0px 3px 3px rgba(209, 205, 225, 0.717);
+    cursor: pointer;
+}
+
 .town .image{
     height: 250px;
     background: #eeeeee;
-    border-radius: 10px 10px 0 0;
-    overflow: hidden;
 }
-
 
 .town .image img{
     width: 100%;
@@ -98,6 +127,19 @@ form.search button:hover{
 }
 
 .town .content{
-    padding: 16px;
+    border-top: 1px solid silver;
+    padding: 20px;
+    padding-top: 40px;
+    padding-bottom: 40px;
     text-align: center;
+    font-weight: normal;
+    font-size: large;
 }
+
+.town .image{
+    height: 250px;
+    background: #eeeeee;
+    border-radius: 10px 10px 0 0;
+    overflow: hidden;
+}
+
