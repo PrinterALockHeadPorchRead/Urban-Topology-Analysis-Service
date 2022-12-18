@@ -12,6 +12,7 @@ import circular from "graphology-layout/circular";
 import {AbstractGraph} from 'graphology-types';
 import saveAs from './saveAsPNG';
 import { GraphData, GraphDataSrvice } from '../services/graph-data.service';
+import { debounceTime } from 'rxjs';
 
 var graphml = require('graphology-graphml/browser');
 var Graphology = require('graphology');
@@ -106,7 +107,7 @@ export class GraphComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.renderer = new Sigma(this.graph as any, this.container.nativeElement,  {renderEdgeLabels: true, renderLabels: true});
     
-    this.labelsThreshold.valueChanges.subscribe(val => {
+    this.labelsThreshold.valueChanges.pipe(debounceTime(50)).subscribe(val => {
       this.renderer?.setSetting("labelRenderedSizeThreshold", + (val ? val : 0));
     })
 

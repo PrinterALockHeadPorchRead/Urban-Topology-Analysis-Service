@@ -22,6 +22,11 @@ enum sections{
 })
 export class TownComponent implements OnInit, OnDestroy{
 
+  wayPropsCsv?: string;
+  pointPropsCsv?: string;
+  rNodes?: string;
+  rEdges?: string;
+
   id?: number;
   town?: Town;
   RgraphData?: GraphData;
@@ -95,63 +100,60 @@ export class TownComponent implements OnInit, OnDestroy{
   handlePolygon(ev: {name: string, regionId?: number, polygon?: any}){
     if(!this.id) return;
     this.graphName = ev.name;
+    delete this.wayPropsCsv;
+    delete this.pointPropsCsv;
+    delete this.rNodes;
+    delete this.rEdges;
     delete this.LgraphData;
     delete this.RgraphData;
 
     if(ev.regionId){
       this.loading = true;
       this.cdRef.detectChanges();
-      this.townService.getGraphFromId(this.id, ev.regionId).subscribe(res => {
-        // this.currentCsv = res;
-        // console.log(res)
-        this.getRgraph(res.points_csv, res.edges_csv);
-        this.getLgraph(res.reversed_nodes_csv, res.reversed_edges_csv);
-        this.loading = false;
-        this.section = sections.graph;
-        this.cdRef.detectChanges();
-      })
+      this.townService.getGraphFromId(this.id, ev.regionId).subscribe(this.graphSubscriber)
       return;
     }
     if(ev.polygon){
-      this.getGraphData(ev.polygon.getLatLngs()[0]);
+      const nodes = ev.polygon.getLatLngs()[0] as L.LatLng[];
+      const body: [number, number][] = nodes.map(node => [node.lng, node.lat]);
+      this.loading = true;
+      this.cdRef.detectChanges();
+      this.townService.getGraphFromBbox(this.id, body).subscribe(this.graphSubscriber);
       return;
     }
-    // this.roadBounds = (ev.polygon as L.Polygon)?.getBounds();
   }
   
-  getGraphData(nodes: L.LatLng[]){
-    if(!this.id) return;
-    const body: [number, number][] = nodes.map(node => [node.lng, node.lat]);
-    this.loading = true;
+  graphSubscriber = (res: csv_result) => {
+    this.pointPropsCsv = res.points_properties_csv;
+    this.wayPropsCsv = res.ways_properties_csv;
+    this.rNodes = res.reversed_nodes_csv;
+    this.rEdges = res.reversed_edges_csv;
+
+    this.getRgraph(res.points_csv, res.edges_csv);
+    this.getLgraph(res.reversed_nodes_csv, res.reversed_edges_csv);
+    this.loading = false;
+    this.section = sections.graph;
     this.cdRef.detectChanges();
-    this.townService.getGraphFromBbox(this.id, body).subscribe(res => {
-      // this.currentCsv = res;
-      // console.log(res)
-      this.getRgraph(res.points_csv, res.edges_csv);
-      this.getLgraph(res.reversed_nodes_csv, res.reversed_edges_csv);
-      this.loading = false;
-      this.section = sections.graph;
-      this.cdRef.detectChanges();
-    });
   }
 
   handleDownload(type: 'r' | 'l'){
+    let nodes_text = '';
+    let edges_text = '';
     if(type == 'l'){
       if(!this.LgraphData) return;
-
-      const nodes_text = 'id_way,name\n' + Object.values(this.LgraphData.nodes).map(node => `${node.way_id},"${node.name}"`).join('\n');
-      const edges_text = 'source_way,target_way,id\n' + Object.values(this.LgraphData.edges).map(edge => `${edge.from},${edge.to},${edge.id}`).join('\n')
-
-      saveText('nodes.csv', nodes_text, 'text/csv');
+      nodes_text = 'id_way,name\n' + Object.values(this.LgraphData.nodes).map((node, index) => `${node.way_id},"${node.name}"`).join('\n');
+      edges_text = 'source_way,target_way\n' + Object.values(this.LgraphData.edges).map(edge => `${edge.from},${edge.to},${edge.id}`).join('\n');
+      saveText('points.csv', nodes_text, 'text/csv');
       saveText('edges.csv', edges_text, 'text/csv');
     } else {
-      if(!this.RgraphData) return;
-
-      const nodes_text = 'id_node,lon,lat\n' + Object.values(this.RgraphData.nodes).map(node => `${node.way_id},${node.lon},${node.lat}`).join('\n');
-      const edges_text = 'id_way,source,target,name\n' + Object.values(this.RgraphData.edges).map(edge => `${edge.way_id},${edge.from},${edge.to},"${edge.name}"`).join('\n');
-
-      saveText('nodes.csv', nodes_text, 'text/csv');
-      saveText('edges.csv', edges_text, 'text/csv');
+      if(this.rNodes)
+        saveText('reversed_nodes.csv', this.rNodes, 'text/csv');
+      if(this.rEdges)
+        saveText('reversed_edges.csv', this.rEdges, 'text/csv');
+      if(this.pointPropsCsv) 
+        saveText('points_properties.csv', this.pointPropsCsv, 'text/csv');
+      if(this.wayPropsCsv) 
+        saveText('ways_properties.csv', this.wayPropsCsv, 'text/csv');
     }
   }
 
@@ -187,7 +189,7 @@ export class TownComponent implements OnInit, OnDestroy{
 
     this.RgraphData = {
       nodes: nodes,
-      edges: edges
+      edges: edges,
     }
     // console.log(this.RgraphData)
   }
@@ -229,7 +231,7 @@ export class TownComponent implements OnInit, OnDestroy{
 
     this.LgraphData = {
       nodes: nodes,
-      edges: edges
+      edges: edges,
     }
   }
 }
