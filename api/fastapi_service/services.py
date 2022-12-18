@@ -45,23 +45,20 @@ def list_to_csv_str(data, columns : List['str']):
     return buffer.getvalue(), df
 
 def reversed_graph_to_csv_str(edges_df : DataFrame):
-    # redges_df, rnodes_df, rmatrix_df = get_reversed_graph(edges_df, 
-    #                                                       source='source', 
-    #                                                       target='target', 
-    #                                                       merging_column='id_way', 
-    #                                                       empty_cell_sign='', 
-    #                                                       edge_attr=['id_way'])
+    redges_df, rnodes_df, rmatrix_df = get_reversed_graph(edges_df, 
+                                                          source='source', 
+                                                          target='target', 
+                                                          merging_column='id_way', 
+                                                          empty_cell_sign='', 
+                                                          edge_attr=['id_way'])
 
     redges = io.StringIO()
     rnodes = io.StringIO()
     # rmatrix = io.StringIO()
 
-    # redges_df.to_csv(redges, index=False)
-    # rnodes_df.to_csv(rnodes, index=False)
+    redges_df.to_csv(redges, index=False)
+    rnodes_df.to_csv(rnodes, index=False)
     # rmatrix_df.to_csv(rmatrix, index=False)
-
-    pd.read_csv('./data/reversed_edges.csv').to_csv(redges, index=False)
-    pd.read_csv('./data/reversed_nodes.csv').to_csv(rnodes, index=False)
     
     return redges.getvalue(), rnodes.getvalue(), None
 
