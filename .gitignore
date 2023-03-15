@@ -3,3 +3,5 @@ node_modules
 logs
 __pycache__
 package-lock.json
+cache/*
+api/fastapi_service/data/cities_osm/*
