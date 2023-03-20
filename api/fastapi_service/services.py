@@ -16,6 +16,7 @@ from sqlalchemy import update, text
 import pandas as pd
 import osmnx as ox
 import os.path
+import os
 import ast
 import io
 import pandas as pd
@@ -132,86 +133,104 @@ def add_info_to_db(city_df : DataFrame):
 
 
 def add_graph_to_db(city_id : int, file_path : str):
-        ways, nodes = parse_osm(file_path)
+    # command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}.pbf" --write'
+    # res = os.system()
+    # ways, nodes = parse_osm(file_path)
 
-        conn = engine.connect()
-        for key in nodes.keys():
-            point_dict = nodes[key]
-            lat = point_dict.pop('lat')
-            lon = point_dict.pop('lon')
+    ways, nodes = parse_osm(file_path)
+    conn = engine.connect()
+
+    point_list = []
+    point_property_list = []
+    way_list = []
+    edge_list = []
+    way_property_list = []
+
+    for key in nodes.keys():
+        point_dict = nodes[key]
+        lat = point_dict.pop('lat')
+        lon = point_dict.pop('lon')
+        point_list.append({"id": f"{key}",
+                         "latitude": f"{lat}",
+                         "longitude": f"{lon}"})
+        for key2 in point_dict.keys():
             try:
-                query = PointAsync.insert().values(id=f"{key}", latitude=f'{lat}', longitude=f'{lon}')
-                res = conn.execute(query)
+                query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
+                prop = conn.execute(query).first()
             except:
                 pass
-            for key2 in point_dict.keys():
+            if prop != None:
+                prop_id = prop.id
+            else:
                 try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
+                    query = PropertyAsync.insert().values(property=f"{key2}")
+                    prop_id = conn.execute(query).inserted_primary_key[0]
+                    prop_id = int(prop_id)
                 except:
                     pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = PointPropertyAsync.insert().values(id_point=f"{key}",id_property=f"{prop_id}", value = f"{point_dict[key2]}")
-                    res = conn.execute(query)
-                except:
-                    pass
-
-        for key in ways.keys():
+            point_property_list.append({"id_point": f"{key}",
+                                              "id_property": f"{prop_id}", 
+                                              "value": f"{point_dict[key2]}"})
+    try:
+        conn.execute(PointAsync.insert(), point_list)
+    except:
+        pass
+    try:
+        res = conn.execute(PointPropertyAsync.insert(), point_property_list)
+    except:
+        pass
+    for key in ways.keys():
+        way_list.append({"id": f"{key}", 
+                         "id_city": f"{city_id}"})
+        graph = ways[key].pop('graph')
+        way_dict = ways[key]
+        oneway = False
+        if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
+            oneway = True
+        for edge in graph:
+            edge_list.append({"id_way": f'{key}',
+                              "id_src": f'{edge[0]}', 
+                              "id_dist": f'{edge[1]}'})
+            
+            if not oneway:
+                edge_list.append({"id_way": f'{key}',
+                              "id_src": f'{edge[1]}', 
+                              "id_dist": f'{edge[0]}'})
+            
+        for key2 in way_dict.keys():
             try:
-                query = WayAsync.insert().values(id = f"{key}", id_city = f"{city_id}")
-                conn.execute(query)
+                query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
+                prop = conn.execute(query).first()
             except:
                 pass
-            graph = ways[key].pop('graph')
-            way_dict = ways[key]
-            oneway = False
-            if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
-                oneway = True
-            for edge in graph:
+            if prop != None:
+                prop_id = prop.id
+            else:
                 try:
-                    query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[0]}', id_dist=f'{edge[1]}')
-                    res = conn.execute(query)
+                    query = PropertyAsync.insert().values(property=f"{key2}")
+                    prop_id = conn.execute(query).inserted_primary_key[0]
+                    prop_id = int(prop_id)
                 except:
                     pass
-                if not oneway:
-                    try:
-                        query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[1]}', id_dist=f'{edge[0]}')
-                        res = conn.execute(query)
-                    except:
-                        pass
-                
-            for key2 in way_dict.keys():
-                try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
-                except:
-                    pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = WayPropertyAsync.insert().values(id_way=f'{key}',id_property=f'{prop_id}', value = f'{way_dict[key2]}')
-                    conn.execute(query)
-                except:
-                    pass
-        query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
-        conn.execute(query)
-        conn.close()
+            way_property_list.append({"id_way": f'{key}',
+                                      "id_property": f'{prop_id}',
+                                      "value":  f'{way_dict[key2]}'})
+
+    try:
+        conn.execute(WayAsync.insert(), way_list)
+    except:
+        pass
+    try:
+        conn.execute(EdgesAsync.insert(), edge_list)
+    except:
+        pass
+    try:
+        conn.execute(WayPropertyAsync.insert(), way_property_list)
+    except:
+        pass
+    query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
+    conn.execute(query)
+    conn.close()
 
 def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
@@ -235,6 +254,9 @@ def add_city_to_db(df : DataFrame, property_id : int) -> int:
         return city.id
 
 def init_db(cities_info : DataFrame):
+    with engine.connect() as conn:
+        query = text("CREATE EXTENSION IF NOT EXISTS postgis")
+        res = conn.execute(query)
     for row in range(0, cities_info.shape[0]):
         add_info_to_db(cities_info.loc[row, :])
 
