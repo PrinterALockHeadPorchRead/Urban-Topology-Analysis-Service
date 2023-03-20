@@ -133,10 +133,6 @@ def add_info_to_db(city_df : DataFrame):
 
 
 def add_graph_to_db(city_id : int, file_path : str):
-    # command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}.pbf" --write'
-    # res = os.system()
-    # ways, nodes = parse_osm(file_path)
-
     ways, nodes = parse_osm(file_path)
     conn = engine.connect()
 
@@ -254,9 +250,6 @@ def add_city_to_db(df : DataFrame, property_id : int) -> int:
         return city.id
 
 def init_db(cities_info : DataFrame):
-    with engine.connect() as conn:
-        query = text("CREATE EXTENSION IF NOT EXISTS postgis")
-        res = conn.execute(query)
     for row in range(0, cities_info.shape[0]):
         add_info_to_db(cities_info.loc[row, :])
 
