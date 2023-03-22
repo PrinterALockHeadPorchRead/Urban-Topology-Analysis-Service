@@ -132,86 +132,164 @@ def add_info_to_db(city_df : DataFrame):
 
 
 def add_graph_to_db(city_id : int, file_path : str):
-        ways, nodes = parse_osm(file_path)
-
         conn = engine.connect()
-        for key in nodes.keys():
-            point_dict = nodes[key]
-            lat = point_dict.pop('lat')
-            lon = point_dict.pop('lon')
-            try:
-                query = PointAsync.insert().values(id=f"{key}", latitude=f'{lat}', longitude=f'{lon}')
-                res = conn.execute(query)
-            except:
-                pass
-            for key2 in point_dict.keys():
-                try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
-                except:
-                    pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = PointPropertyAsync.insert().values(id_point=f"{key}",id_property=f"{prop_id}", value = f"{point_dict[key2]}")
-                    res = conn.execute(query)
-                except:
-                    pass
+        # with open("/osmosis/script/pgsimple_schema_0.6.sql", "r") as f:
+        #     query = text(f.read())
+        #     conn.execute(query) -U user -d fastapi_database
+        command = f"psql postgresql://user:password@postgres:5432/fastapi_database -f /osmosis/script/pgsimple_schema_0.6.sql"
+        res = os.system(command)
 
-        for key in ways.keys():
-            try:
-                query = WayAsync.insert().values(id = f"{key}", id_city = f"{city_id}")
-                conn.execute(query)
-            except:
-                pass
-            graph = ways[key].pop('graph')
-            way_dict = ways[key]
-            oneway = False
-            if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
-                oneway = True
-            for edge in graph:
-                try:
-                    query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[0]}', id_dist=f'{edge[1]}')
-                    res = conn.execute(query)
-                except:
-                    pass
-                if not oneway:
-                    try:
-                        query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[1]}', id_dist=f'{edge[0]}')
-                        res = conn.execute(query)
-                    except:
-                        pass
-                
-            for key2 in way_dict.keys():
-                try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
-                except:
-                    pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = WayPropertyAsync.insert().values(id_way=f'{key}',id_property=f'{prop_id}', value = f'{way_dict[key2]}')
-                    conn.execute(query)
-                except:
-                    pass
+        command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}.pbf" --write-pgsimp authFile=./data/db.properties'
+        res = os.system(command)
+
+        required_road_types = ('motorway', 'trunk', 'primary', 'secondary', 
+                                'tertiary', 'unclassified', 'residential', 'road', 
+                                'living_street', 'service', 'pedestrian')
+
+        # Вставка в Ways
+        query = text(
+            f"""
+            INSERT INTO "Ways" (id, id_city)
+            SELECT w.id,
+            {city_id}
+            FROM ways w
+            JOIN way_tags wt ON wt.way_id = w.id
+            WHERE wt.v in ({"'"+"', '".join(required_road_types)+"'"});
+            """
+        )
+        # query = WayAsync.insert().from_select(["id", "id_city"], select_query)
+        res = conn.execute(query)
+
+        # Вставка в Points
+        query = text(
+            """INSERT INTO "Points" ("id", "longitude", "latitude")
+            SELECT DISTINCT n.id,
+	        ST_X(n.geom) AS longitude, 
+            ST_Y(n.geom) AS latitude
+            FROM nodes n
+            JOIN way_nodes wn ON wn.node_id = n.id
+            JOIN "Ways" w ON w.id = wn.way_id;
+            """)
+        # query = PointAsync.insert().from_select(["id", "longitude", "latitude"], select_query)
+        res = conn.execute(query)
+
+        # Вставка в Properties для Ways
+        query = text(
+            """INSERT INTO "Properties" (property)
+            SELECT DISTINCT wt.k
+            FROM way_tags wt
+            JOIN "Ways" w ON w.id = wt.way_id
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в Properties для Points
+        query = text(
+            """INSERT INTO "Properties" (property)
+            SELECT DISTINCT nt.k
+            FROM node_tags nt
+            JOIN "Points" p ON p.id = nt.node_id
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в WayProperties, используя значения из Properties
+        query = text(
+            """INSERT INTO "WayProperties" (id_way, id_property, value)
+            SELECT wt.way_id,
+            p.id,
+            wt.v
+            FROM way_tags wt
+            JOIN "Ways" w ON w.id = wt.way_id
+            JOIN "Properties" p ON p.property LIKE wt.k
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в PointProperties, используя значения из Properties
+        query = text(
+            """INSERT INTO "PointProperties" (id_point, id_property, value)
+            SELECT nt.node_id,
+            pr.id,
+            nt.v
+            FROM node_tags nt
+            JOIN "Points" pt ON pt.id = nt.node_id
+            JOIN "Properties" pr ON pr.property LIKE nt.k
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в Edges дорог с пометкой oneway
+        query = text(
+            """INSERT INTO "Edges" (id_way, id_src, id_dist)
+            SELECT 
+            wn.way_id,
+            wn.node_id,
+            wn2.node_id
+            FROM "Ways" w
+            JOIN way_nodes wn ON wn.way_id = w.id 
+            JOIN way_tags wt ON wt.way_id = wn.way_id 
+            JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+            WHERE wt.k like 'oneway'
+            AND wt.v like 'yes'
+            AND wn.sequence_id + 1 = wn2.sequence_id;
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в Edges дорог без пометки oneway
+        query = text(
+            """WITH oneway_way_id AS (
+            SELECT
+                w.id
+            FROM ways w
+            JOIN way_tags wt ON wt.way_id = w.id 
+            WHERE (wt.k like 'oneway'
+            AND wt.v like 'yes')
+            )
+            INSERT INTO "Edges" (id_way, id_src, id_dist)
+            SELECT 
+            wn.way_id,
+            wn.node_id,
+            wn2.node_id
+            FROM "Ways" w
+            JOIN way_nodes wn ON wn.way_id = w.id
+            JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+            WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
+            AND wn.sequence_id + 1 = wn2.sequence_id;
+            """
+        )
+        res = conn.execute(query)
+
+        # Вставка в Edges обратных дорог без пометки oneway
+        query = text(
+            """WITH oneway_way_id AS (
+            SELECT
+                w.id
+            FROM ways w
+            JOIN way_tags wt ON wt.way_id = w.id 
+            WHERE (wt.k like 'oneway'
+            AND wt.v like 'yes')
+            )
+            INSERT INTO "Edges" (id_way, id_src, id_dist)
+            SELECT 
+            wn.way_id,
+            wn2.node_id,
+            wn.node_id
+            FROM "Ways" w
+            JOIN way_nodes wn ON wn.way_id = w.id
+            JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+            WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
+            AND wn.sequence_id + 1 = wn2.sequence_id;
+            """
+        )
+        res = conn.execute(query)
+
         query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
         conn.execute(query)
+
         conn.close()
+        
 
 def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
