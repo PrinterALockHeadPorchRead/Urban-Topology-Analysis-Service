@@ -154,7 +154,8 @@ def add_graph_to_db(city_id : int, file_path : str):
             {city_id}
             FROM ways w
             JOIN way_tags wt ON wt.way_id = w.id
-            WHERE wt.v in ({"'"+"', '".join(required_road_types)+"'"});
+            WHERE wt.k LIKE 'highway'
+            AND wt.v IN ({"'"+"', '".join(required_road_types)+"'"});
             """
         )
         # query = WayAsync.insert().from_select(["id", "id_city"], select_query)
