@@ -16,7 +16,6 @@ from sqlalchemy import update, text
 import pandas as pd
 import osmnx as ox
 import os.path
-import os
 import ast
 import io
 import pandas as pd
@@ -141,6 +140,7 @@ def add_graph_to_db(city_id : int, file_path : str):
     way_list = []
     edge_list = []
     way_property_list = []
+    property_dict = {}
 
     for key in nodes.keys():
         point_dict = nodes[key]
@@ -150,23 +150,25 @@ def add_graph_to_db(city_id : int, file_path : str):
                          "latitude": f"{lat}",
                          "longitude": f"{lon}"})
         for key2 in point_dict.keys():
-            try:
-                query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                prop = conn.execute(query).first()
-            except:
-                pass
-            if prop != None:
-                prop_id = prop.id
+            # try:
+            #     query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
+            #     prop = conn.execute(query).first()
+            # except:
+            #     pass
+            if property_dict.get(key2) is not None:
+                prop_id = property_dict.get(key2)
             else:
                 try:
                     query = PropertyAsync.insert().values(property=f"{key2}")
                     prop_id = conn.execute(query).inserted_primary_key[0]
                     prop_id = int(prop_id)
+                    property_dict.update({key2: prop_id})
                 except:
                     pass
             point_property_list.append({"id_point": f"{key}",
-                                              "id_property": f"{prop_id}", 
-                                              "value": f"{point_dict[key2]}"})
+                                        "id_property": f"{prop_id}", 
+                                        "value": f"{point_dict[key2]}"})
+            
     try:
         conn.execute(PointAsync.insert(), point_list)
     except:
@@ -175,6 +177,9 @@ def add_graph_to_db(city_id : int, file_path : str):
         res = conn.execute(PointPropertyAsync.insert(), point_property_list)
     except:
         pass
+    point_list.clear()
+    point_property_list.clear()
+    
     for key in ways.keys():
         way_list.append({"id": f"{key}", 
                          "id_city": f"{city_id}"})
@@ -190,22 +195,23 @@ def add_graph_to_db(city_id : int, file_path : str):
             
             if not oneway:
                 edge_list.append({"id_way": f'{key}',
-                              "id_src": f'{edge[1]}', 
-                              "id_dist": f'{edge[0]}'})
+                                  "id_src": f'{edge[1]}', 
+                                  "id_dist": f'{edge[0]}'})
             
         for key2 in way_dict.keys():
-            try:
-                query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                prop = conn.execute(query).first()
-            except:
-                pass
-            if prop != None:
-                prop_id = prop.id
+            # try:
+            #     query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
+            #     prop = conn.execute(query).first()
+            # except:
+            #     pass
+            if property_dict.get(key2) is not None:
+                prop_id = property_dict.get(key2)
             else:
                 try:
                     query = PropertyAsync.insert().values(property=f"{key2}")
                     prop_id = conn.execute(query).inserted_primary_key[0]
                     prop_id = int(prop_id)
+                    property_dict.update({key2: prop_id})
                 except:
                     pass
             way_property_list.append({"id_way": f'{key}',
@@ -224,9 +230,14 @@ def add_graph_to_db(city_id : int, file_path : str):
         conn.execute(WayPropertyAsync.insert(), way_property_list)
     except:
         pass
+    way_list.clear()
+    edge_list.clear()
+    way_property_list.clear()
+
     query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
     conn.execute(query)
     conn.close()
+
 
 def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
