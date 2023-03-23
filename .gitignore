@@ -6,4 +6,5 @@ package-lock.json
 cache/*
 api/cities_osm/*.osm
 *.osm
+*.pbf
 properties
