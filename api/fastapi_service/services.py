@@ -175,21 +175,28 @@ def add_graph_to_db(city_id : int, file_path : str):
         res = conn.execute(query)
 
         # Вставка в Properties для Ways
-        query = text(
-            """INSERT INTO "Properties" (property)
-            SELECT DISTINCT wt.k
-            FROM way_tags wt
-            JOIN "Ways" w ON w.id = wt.way_id
-            """
-        )
-        res = conn.execute(query)
+        # query = text(
+        #     """INSERT INTO "Properties" (property)
+        #     SELECT DISTINCT wt.k
+        #     FROM way_tags wt
+        #     JOIN "Ways" w ON w.id = wt.way_id
+        #     """
+        # )
+        # res = conn.execute(query)
 
         # Вставка в Properties для Points
         query = text(
             """INSERT INTO "Properties" (property)
-            SELECT DISTINCT nt.k
+            SELECT DISTINCT *
+            FROM
+            (SELECT DISTINCT nt.k
             FROM node_tags nt
             JOIN "Points" p ON p.id = nt.node_id
+            UNION
+            SELECT DISTINCT wt.k
+            FROM way_tags wt
+            JOIN "Ways" w ON w.id = wt.way_id
+            ) p
             """
         )
         res = conn.execute(query)
@@ -492,14 +499,27 @@ async def graph_from_poly(city_id, polygon):
     prop = await database.fetch_one(q)
     prop_id = prop.id
     query = text(
-        f"""SELECT id, id_way, id_src, id_dist, value FROM 
-        (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
-        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
-        (SELECT "Points".id as point_id FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
-        p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
-        """)
+        f"""SELECT e.id, e.id_way, e.id_src, e.id_dist, wp.value 
+        FROM "Edges" e 
+        JOIN "WayProperties" wp on wp.id_way = e.id_way 
+        JOIN "Ways" w on w.id = e.id_way 
+        JOIN "Points" p ON p.id = e.id_src 
+        WHERE wp.id_property = {prop_id}
+        AND w.id_city = {city_id}
+        AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+        AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
+        """
+    )
+    # query = text(
+    #     f"""SELECT id, id_way, id_src, id_dist, value 
+    #     FROM (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" 
+    #     JOIN (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) q ON "Edges".id_way = q.id_way) a 
+    #     JOIN (SELECT "Points".id as point_id
+    #     FROM (SELECT id_src FROM "Edges" 
+    #     JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) w ON "Edges".id_way = w.way_id) p 
+    #     JOIN "Points" ON p.id_src = "Points".id 
+    #     WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
+    #     """)
     res = await database.fetch_all(query)
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
 
