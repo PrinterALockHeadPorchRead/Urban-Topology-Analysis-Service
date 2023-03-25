@@ -420,6 +420,7 @@ def record_obj_to_wprop(record):
 def record_obj_to_pprop(record):
     return [record.id_point ,record.property ,record.value]
 
+
 async def graph_from_poly(city_id, polygon):
     bbox = polygon.bounds   # min_lon, min_lat, max_lon, max_lat
 
@@ -428,29 +429,54 @@ async def graph_from_poly(city_id, polygon):
     if city is None or not city.downloaded:
         return None, None, None, None
     query = text(
-        f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
-        WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
-        """)
+        f"""SELECT p.id, p.longitude, p.latitude 
+        FROM "Points" p
+        JOIN "Edges" e ON e.id_src = p.id 
+        JOIN "Ways" w ON e.id_way = w.id 
+        WHERE w.id_city = {city_id}
+        AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+        AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
+        """
+    )
+    # query = text(
+    #     f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
+    #     WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
+    #     """)
     res = await database.fetch_all(query)
     points = list(map(point_obj_to_list, res)) # [...[id, longitude, latitude]...]
+
     q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
     prop = await database.fetch_one(q)
     prop_id = prop.id
+
     query = text(
-        f"""SELECT id, id_way, id_src, id_dist, value FROM 
-        (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
-        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
-        (SELECT "Points".id as point_id FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
-        p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
-        """)
+        f"""SELECT e.id, e.id_way, e.id_src, e.id_dist, wp.value 
+        FROM "Edges" e 
+        JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+        JOIN "Ways" w ON w.id = e.id_way 
+        JOIN "Points" p ON p.id = e.id_src 
+        WHERE wp.id_property = {prop_id}
+        AND w.id_city = {city_id}
+        AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+        AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
+        """
+    )
+
+    # query = text(
+    #     f"""SELECT id, id_way, id_src, id_dist, value FROM 
+    #     (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
+    #     (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
+    #     (SELECT "Points".id as point_id FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
+    #     p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
+    #     """)
     res = await database.fetch_all(query)
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
-
     points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
+
     conn = engine.connect()
 
     ids_ways = build_or_query('id_way', ways_prop_ids)
@@ -475,12 +501,15 @@ async def graph_from_poly(city_id, polygon):
 
     return points, edges, points_prop, ways_prop    
 
-def build_or_query(query_field : str, data_set : set()):
-    buffer = ''
-    for element in data_set:
-        buffer += f'{query_field} = {element} OR '
 
-    return buffer[0:len(buffer)-4]
+def build_or_query(query_field : str, data_set : set()):
+    buffer = f"{query_field} IN ( {', '.join(map(str, data_set))} )"
+    # buffer = ''
+    # for element in data_set:
+    #     buffer += f'{query_field} = {element} OR '
+
+    # return buffer[0:len(buffer)-4]
+    return buffer
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()
