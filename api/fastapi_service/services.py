@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
-from typing import List, TYPE_CHECKING
+from typing import List, Iterable, TYPE_CHECKING
 from sqlalchemy import update, text
 
 import pandas as pd
@@ -449,21 +449,49 @@ async def graph_from_poly(city_id, polygon):
 
     q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
     prop = await database.fetch_one(q)
-    prop_id = prop.id
+    prop_id_name = prop.id
 
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'highway')
+    prop = await database.fetch_one(q)
+    prop_id_highway = prop.id
+
+    road_types = {'motorway', 'trunk', 'primary', 'secondary', 'tertiary'}
+    road_types_query = build_in_query_str('value', road_types)
     query = text(
-        f"""SELECT e.id, e.id_way, e.id_src, e.id_dist, wp.value 
-        FROM "Edges" e 
-        JOIN "WayProperties" wp ON wp.id_way = e.id_way 
-        JOIN "Ways" w ON w.id = e.id_way 
-        JOIN "Points" p ON p.id = e.id_src 
-        WHERE wp.id_property = {prop_id}
-        AND w.id_city = {city_id}
-        AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
-        AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
+        f"""WITH named_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE wp.id_property = {prop_id_name}
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        ),
+        unnamed_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE e.id_way NOT IN (
+                SELECT id_way
+                FROM named_streets
+            )
+            AND (wp.id_property = {prop_id_highway} AND {road_types_query})
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        )
+        SELECT id, id_way, id_src, id_dist, value
+        FROM named_streets
+        UNION
+        SELECT id, id_way, id_src, id_dist, NULL
+        FROM unnamed_streets
+        ;
         """
     )
-
     # query = text(
     #     f"""SELECT id, id_way, id_src, id_dist, value FROM 
     #     (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
@@ -479,7 +507,7 @@ async def graph_from_poly(city_id, polygon):
 
     conn = engine.connect()
 
-    ids_ways = build_or_query('id_way', ways_prop_ids)
+    ids_ways = build_in_query_int('id_way', ways_prop_ids)
     query = text(
         f"""SELECT id_way, property, value FROM 
         (SELECT id_way, id_property, value FROM "WayProperties" WHERE {ids_ways}) AS p 
@@ -489,7 +517,7 @@ async def graph_from_poly(city_id, polygon):
     res = conn.execute(query).fetchall()
     ways_prop = list(map(record_obj_to_wprop, res))
 
-    ids_points = build_or_query('id_point', points_prop_ids)
+    ids_points = build_in_query_int('id_point', points_prop_ids)
     query = text(
         f"""SELECT id_point, property, value FROM 
         (SELECT id_point, id_property, value FROM "PointProperties" WHERE {ids_points}) AS p 
@@ -502,7 +530,7 @@ async def graph_from_poly(city_id, polygon):
     return points, edges, points_prop, ways_prop    
 
 
-def build_or_query(query_field : str, data_set : set()):
+def build_in_query_int(query_field : str, data_set : Iterable[int]):
     buffer = f"{query_field} IN ( {', '.join(map(str, data_set))} )"
     # buffer = ''
     # for element in data_set:
@@ -510,6 +538,13 @@ def build_or_query(query_field : str, data_set : set()):
 
     # return buffer[0:len(buffer)-4]
     return buffer
+
+
+def build_in_query_str(query_field : str, data_set : Iterable[str]):
+    data_string = "', '".join(data_set)
+    buffer = f"{query_field} IN ('{data_string}')"
+    return buffer
+
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()
