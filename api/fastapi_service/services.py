@@ -240,7 +240,8 @@ def add_graph_to_db(city_id : int, file_path : str):
             JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
             WHERE wt.k like 'oneway'
             AND wt.v like 'yes'
-            AND wn.sequence_id + 1 = wn2.sequence_id;
+            AND wn.sequence_id + 1 = wn2.sequence_id
+            ORDER BY wn.sequence_id;
             """
         )
         res = conn.execute(query)
@@ -264,7 +265,8 @@ def add_graph_to_db(city_id : int, file_path : str):
             JOIN way_nodes wn ON wn.way_id = w.id
             JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
             WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
-            AND wn.sequence_id + 1 = wn2.sequence_id;
+            AND wn.sequence_id + 1 = wn2.sequence_id
+            ORDER BY wn.sequence_id;
             """
         )
         res = conn.execute(query)
@@ -288,7 +290,8 @@ def add_graph_to_db(city_id : int, file_path : str):
             JOIN way_nodes wn ON wn.way_id = w.id
             JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
             WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
-            AND wn.sequence_id + 1 = wn2.sequence_id;
+            AND wn.sequence_id + 1 = wn2.sequence_id
+            ORDER BY wn2.sequence_id DESC;
             """
         )
         res = conn.execute(query)
