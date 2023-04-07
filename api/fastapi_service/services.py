@@ -125,7 +125,7 @@ def add_info_to_db(city_df : DataFrame):
         downloaded = city_db.downloaded
         city_id = city_db.id
     conn.close()
-    file_path = f'./data/cities_osm/{city_name}.osm'
+    file_path = f'./data/cities_osm/{city_name}.osm.pbf'
     if (not downloaded) and (os.path.exists(file_path)):
         print("ANDO NOW IM HERE")
         add_graph_to_db(city_id=city_id, file_path=file_path)
@@ -139,7 +139,7 @@ def add_graph_to_db(city_id : int, file_path : str):
         command = f"psql postgresql://user:password@postgres:5432/fastapi_database -f /osmosis/script/pgsimple_schema_0.6.sql"
         res = os.system(command)
 
-        command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}.pbf" --write-pgsimp authFile=./data/db.properties'
+        command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}" --write-pgsimp authFile=./data/db.properties'
         res = os.system(command)
 
         required_road_types = ('motorway', 'trunk', 'primary', 'secondary', 
@@ -602,7 +602,7 @@ nodata = '-'
 merging_col = 'id_way'
 
 
-def union_and_delete(graph):
+def union_and_delete(graph: nx.Graph):
     edge_to_remove = list()
 
     for source, target, attributes in graph.edges(data=True):
@@ -644,15 +644,15 @@ def reverse_graph(graph):
     return new_graph
 
 
-def convert_to_df(graph, source='source', target='target'):
+def convert_to_df(graph: nx.Graph, source='source', target='target'):
     edges_df = nx.to_pandas_edgelist(graph, source='source_way', target='target_way')
     nodes_df = pd.DataFrame.from_dict(graph.nodes, orient='index')
 
     return edges_df, nodes_df
 
 
-def get_reversed_graph(graph, source='source', target='target', merging_column='way_id', empty_cell_sign='-',
-                       edge_attr=['way_id']):
+def get_reversed_graph(graph: DataFrame, source: str = 'source', target: str = 'target', merging_column: str ='way_id', empty_cell_sign: str = '-',
+                       edge_attr: List[str] = ['way_id']):
     global nodata
     global merging_col
     nodata = empty_cell_sign
