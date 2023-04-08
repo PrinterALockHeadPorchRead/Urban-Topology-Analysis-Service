@@ -1,4 +1,4 @@
-from database import engine, Base, SessionLocal, database
+from database import engine, Base, SessionLocal, database, DATABASE_URL
 from models import City, CityProperty, Point
 from shapely.geometry.point import Point as ShapelyPoint
 from database import *
@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
-from typing import List, TYPE_CHECKING
+from typing import List, Iterable,TYPE_CHECKING
 from sqlalchemy import update, text
 
 import pandas as pd
@@ -136,15 +136,14 @@ def add_graph_to_db(city_id : int, file_path : str):
         # with open("/osmosis/script/pgsimple_schema_0.6.sql", "r") as f:
         #     query = text(f.read())
         #     conn.execute(query) -U user -d fastapi_database
-        command = f"psql postgresql://user:password@postgres:5432/fastapi_database -f /osmosis/script/pgsimple_schema_0.6.sql"
+        command = f"psql {DATABASE_URL} -f /osmosis/script/pgsimple_schema_0.6.sql"
+        res = os.system(command)
+        
+        command = f'/osmosis/bin/osmosis --read-pbf-fast file="{file_path}" --write-pgsimp authFile=./data/db.properties'
         res = os.system(command)
 
-        command = f'/osmosis/bin/osmosis --read-pbf file="{file_path}" --write-pgsimp authFile=./data/db.properties'
-        res = os.system(command)
-
-        required_road_types = ('motorway', 'trunk', 'primary', 'secondary', 
-                                'tertiary', 'unclassified', 'residential', 'road', 
-                                'living_street', 'service', 'pedestrian')
+        required_road_types = ('motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'road', 'unclassified',
+                               'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link') # , 'residential','living_street'
 
         # Вставка в Ways
         query = text(
@@ -328,67 +327,67 @@ def init_db(cities_info : DataFrame):
         add_info_to_db(cities_info.loc[row, :])
 
 
-async def download_info(city : City, extension : float) -> bool:
-    filePath = f'./data/graphs/{city}.osm'
-    if os.path.isfile(filePath):
-        print(f'Exists: {filePath}')
-        return True
-    else:
-        print(f'Loading: {filePath}')
-        query = {'city': city.city_name}
-        try:
-            city_info = ox.geocode_to_gdf(query)
+# async def download_info(city : City, extension : float) -> bool:
+#     filePath = f'./data/graphs/{city}.osm.pbf'
+#     if os.path.isfile(filePath):
+#         print(f'Exists: {filePath}')
+#         return True
+#     else:
+#         print(f'Loading: {filePath}')
+#         query = {'city': city.city_name}
+#         try:
+#             city_info = ox.geocode_to_gdf(query)
 
-            north = city_info.iloc[0]['bbox_north']  
-            south = city_info.iloc[0]['bbox_south']
-            delta = (north-south) * extension / 200
-            north += delta
-            south -= delta
+#             north = city_info.iloc[0]['bbox_north']  
+#             south = city_info.iloc[0]['bbox_south']
+#             delta = (north-south) * extension / 200
+#             north += delta
+#             south -= delta
 
-            east = city_info.iloc[0]['bbox_east'] 
-            west = city_info.iloc[0]['bbox_west']
-            delta = (east-west) * extension / 200
-            east += delta
-            west -= delta
+#             east = city_info.iloc[0]['bbox_east'] 
+#             west = city_info.iloc[0]['bbox_west']
+#             delta = (east-west) * extension / 200
+#             east += delta
+#             west -= delta
 
-            G = ox.graph_from_bbox(north=north, south=south, east=east, west=west, simplify=True, network_type='drive',)
-            ox.save_graph_xml(G, filepath=filePath)
-            return True
+#             G = ox.graph_from_bbox(north=north, south=south, east=east, west=west, simplify=True, network_type='drive',)
+#             ox.save_graph_xml(G, filepath=filePath)
+#             return True
 
-        except ValueError:
-            print('Invalid city name')
-            return False
+#         except ValueError:
+#             print('Invalid city name')
+#             return False
 
-def delete_info(city : City) -> bool:
-    filePath = f'./data/graphs/{city}.osm'
-    if os.path.isfile(filePath):
-        os.remove(filePath)
-        print(f'Deleted: {filePath}')
-        return True
-    else:
-        print(f"File doesn't exist: {filePath}")
-        return False
+# def delete_info(city : City) -> bool:
+#     filePath = f'./data/graphs/{city}.osm.pbf'
+#     if os.path.isfile(filePath):
+#         os.remove(filePath)
+#         print(f'Deleted: {filePath}')
+#         return True
+#     else:
+#         print(f"File doesn't exist: {filePath}")
+#         return False
         
 
-async def download_city(city_id : int, extension : float) -> CityBase:
-    query = CityAsync.select().where(CityAsync.c.id == city_id)
-    city = await database.fetch_one(query)
-    if city is None:
-        return None
+# async def download_city(city_id : int, extension : float) -> CityBase:
+#     query = CityAsync.select().where(CityAsync.c.id == city_id)
+#     city = await database.fetch_one(query)
+#     if city is None:
+#         return None
         
-    city.downloaded = await download_info(city=city, extension=extension)
+#     city.downloaded = await download_info(city=city, extension=extension)
 
-    return city_to_scheme(city=city)
+#     return city_to_scheme(city=city)
 
-async def delete_city(city_id : int) -> CityBase:
-    query = CityAsync.select().where(CityAsync.c.id == city_id)
-    city = await database.fetch_one(query)
-    if city is None:
-        return None
+# async def delete_city(city_id : int) -> CityBase:
+#     query = CityAsync.select().where(CityAsync.c.id == city_id)
+#     city = await database.fetch_one(query)
+#     if city is None:
+#         return None
         
-    delete_info(city=city)
-    city.downloaded = False
-    return await city_to_scheme(city=city)
+#     delete_info(city=city)
+#     city.downloaded = False
+#     return await city_to_scheme(city=city)
 
 def to_list(polygon : LineString):
     list = []
@@ -529,7 +528,7 @@ async def graph_from_poly(city_id, polygon):
     points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
     conn = engine.connect()
 
-    ids_ways = build_or_query('id_way', ways_prop_ids)
+    ids_ways = build_in_query('id_way', ways_prop_ids)
     query = text(
         f"""SELECT id_way, property, value FROM 
         (SELECT id_way, id_property, value FROM "WayProperties" WHERE {ids_ways}) AS p 
@@ -539,7 +538,7 @@ async def graph_from_poly(city_id, polygon):
     res = conn.execute(query).fetchall()
     ways_prop = list(map(record_obj_to_wprop, res))
 
-    ids_points = build_or_query('id_point', points_prop_ids)
+    ids_points = build_in_query('id_point', points_prop_ids)
     query = text(
         f"""SELECT id_point, property, value FROM 
         (SELECT id_point, id_property, value FROM "PointProperties" WHERE {ids_points}) AS p 
@@ -551,12 +550,12 @@ async def graph_from_poly(city_id, polygon):
 
     return points, edges, points_prop, ways_prop    
 
-def build_or_query(query_field : str, data_set : set()):
-    buffer = ''
-    for element in data_set:
-        buffer += f'{query_field} = {element} OR '
 
-    return buffer[0:len(buffer)-4]
+def build_in_query(query_field : str, values : Iterable[int]):
+    elements = ", ".join(map(str, values))
+    buffer = f"{query_field} IN ({elements})"
+    return buffer
+
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()
