@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
-from typing import List, Iterable,TYPE_CHECKING
+from typing import List, Iterable, TYPE_CHECKING
 from sqlalchemy import update, text
 
 import pandas as pd
@@ -492,6 +492,7 @@ def record_obj_to_wprop(record):
 def record_obj_to_pprop(record):
     return [record.id_point ,record.property ,record.value]
 
+
 async def graph_from_poly(city_id, polygon):
     bbox = polygon.bounds   # min_lon, min_lat, max_lon, max_lat
 
@@ -500,42 +501,82 @@ async def graph_from_poly(city_id, polygon):
     if city is None or not city.downloaded:
         return None, None, None, None
     query = text(
-        f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
-        WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
-        """)
-    res = await database.fetch_all(query)
-    points = list(map(point_obj_to_list, res)) # [...[id, longitude, latitude]...]
-    q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
-    prop = await database.fetch_one(q)
-    prop_id = prop.id
-    query = text(
-        f"""SELECT e.id, e.id_way, e.id_src, e.id_dist, wp.value 
-        FROM "Edges" e 
-        JOIN "WayProperties" wp on wp.id_way = e.id_way 
-        JOIN "Ways" w on w.id = e.id_way 
-        JOIN "Points" p ON p.id = e.id_src 
-        WHERE wp.id_property = {prop_id}
-        AND w.id_city = {city_id}
+        f"""SELECT p.id, p.longitude, p.latitude 
+        FROM "Points" p
+        JOIN "Edges" e ON e.id_src = p.id 
+        JOIN "Ways" w ON e.id_way = w.id 
+        WHERE w.id_city = {city_id}
         AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
         AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
         """
     )
     # query = text(
-    #     f"""SELECT id, id_way, id_src, id_dist, value 
-    #     FROM (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" 
-    #     JOIN (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) q ON "Edges".id_way = q.id_way) a 
-    #     JOIN (SELECT "Points".id as point_id
-    #     FROM (SELECT id_src FROM "Edges" 
-    #     JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) w ON "Edges".id_way = w.way_id) p 
-    #     JOIN "Points" ON p.id_src = "Points".id 
-    #     WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
+    #     f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
+    #     WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
+    #     """)
+    res = await database.fetch_all(query)
+    points = list(map(point_obj_to_list, res)) # [...[id, longitude, latitude]...]
+
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
+    prop = await database.fetch_one(q)
+    prop_id_name = prop.id
+
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'highway')
+    prop = await database.fetch_one(q)
+    prop_id_highway = prop.id
+
+    road_types = {'motorway', 'trunk', 'primary', 'secondary', 'tertiary'}
+    road_types_query = build_in_query_str('value', road_types)
+    query = text(
+        f"""WITH named_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE wp.id_property = {prop_id_name}
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        ),
+        unnamed_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE e.id_way NOT IN (
+                SELECT id_way
+                FROM named_streets
+            )
+            AND (wp.id_property = {prop_id_highway} AND {road_types_query})
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        )
+        SELECT id, id_way, id_src, id_dist, value
+        FROM named_streets
+        UNION
+        SELECT id, id_way, id_src, id_dist, NULL
+        FROM unnamed_streets
+        ;
+        """
+    )
+    # query = text(
+    #     f"""SELECT id, id_way, id_src, id_dist, value FROM 
+    #     (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
+    #     (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
+    #     (SELECT "Points".id as point_id FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
+    #     p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
     #     """)
     res = await database.fetch_all(query)
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
-
     points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
+
     conn = engine.connect()
 
     ids_ways = build_in_query('id_way', ways_prop_ids)

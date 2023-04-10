@@ -16,7 +16,7 @@ class HighwayWaysHandler(o.SimpleHandler):
         super(HighwayWaysHandler, self).__init__()
         self.required_road_types = {'motorway', 'trunk', 'primary', 'secondary', 
                                     'tertiary', 'unclassified', 'residential', 'road', 
-                                    'living_street', 'service', 'pedestrian'}
+                                    'living_street'} # , 'service', 'pedestrian'
         self.used_nodes_ids = {}
         self.ways_tags = {}
 
