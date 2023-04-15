@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
-from typing import List, Iterable, TYPE_CHECKING
+from typing import List, Iterable, Union, TYPE_CHECKING
 from sqlalchemy import update, text
 
 import pandas as pd
@@ -527,8 +527,9 @@ async def graph_from_poly(city_id, polygon):
     prop = await database.fetch_one(q)
     prop_id_highway = prop.id
 
-    road_types = {'motorway', 'trunk', 'primary', 'secondary', 'tertiary'}
-    road_types_query = build_in_query_str('value', road_types)
+    road_types = ('motorway', 'trunk', 'primary', 'secondary', 'tertiary',
+                  'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link')
+    road_types_query = build_in_query('value', road_types)
     query = text(
         f"""WITH named_streets AS (
             SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
@@ -602,10 +603,17 @@ async def graph_from_poly(city_id, polygon):
     return points, edges, points_prop, ways_prop    
 
 
-def build_in_query(query_field : str, values : Iterable[int]):
-    elements = ", ".join(map(str, values))
-    buffer = f"{query_field} IN ({elements})"
-    return buffer
+def build_in_query(query_field : str, values : Iterable[Union[int, str]]):
+    first_value = next(iter(values))
+    if isinstance(first_value, int):
+        elements = ", ".join(map(str, values))
+        buffer = f"{query_field} IN ({elements})"
+        return buffer
+    elif isinstance(first_value, str):
+        elements = "', '".join(values)
+        buffer = f"{query_field} IN ('{elements}')"
+        return buffer
+    return ""
 
 
 def filter_by_polygon(polygon, edges, points):
