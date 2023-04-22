@@ -26,9 +26,9 @@
 
 ## Тут представлены ссылки на файлы с документацией по конкретным частям проекта:
 
-1) Бекенд и серверная часть [a workaround link](api/backend.md)
-2) Фронтенд
-3) Аналитика
+1) [Бекенд и серверная часть](api/backend.md)
+2) [Фронтенд](ui/front_docs.md)
+3) [Аналитика](https://drive.google.com/drive/folders/1Lt6ESVCi_Gs-j1rVi-z0lxTBCdYizTi6)
 
 ## Обзор
 
