@@ -6,14 +6,15 @@
 2) [osmfetch.py](./cities_osm/osmfetch.py) - содержит функции для скачивания osm-файлов
 *В этой же директории должны содержаться скачанные osm-файлы
 fastapi_service
-### data - директория содержит .csv и .json файлы со свойствами представленных городов 
-1) [database.py](./data/database.py) - содержит определение БД 
-2) [main.py](./data/main.py) - главный файл, содержит реализацию запросов
-3) [models.py](./data/models.py) - содержит определения классов для взаимодействия с БД 
-4) [osm_handler.py](./data/osm_handler.py) - дубликат
-5) [schemas.py](./data/schemas.py) -  содержит определения вспомогательных классов 
-6) [services.py](./data/services.py) - содержит определения вспомогательных функций
-7) [street_name_parser.py](./data/street_name_parser.py) - содержит определение парсера
+### fastapi_service
+#### data - директория содержит .csv и .json файлы со свойствами представленных городов 
+1) [database.py](./fastapi_service/database.py) - содержит определение БД 
+2) [main.py](./fastapi_service/main.py) - главный файл, содержит реализацию запросов
+3) [models.py](./fastapi_service/models.py) - содержит определения классов для взаимодействия с БД 
+4) [osm_handler.py](./fastapi_service/osm_handler.py) - дубликат
+5) [schemas.py](./fastapi_service/schemas.py) -  содержит определения вспомогательных классов 
+6) [services.py](./fastapi_service/services.py) - содержит определения вспомогательных функций
+7) [street_name_parser.py](./fastapi_service/street_name_parser.py) - содержит определение парсера
 ### [Dockerfile](./Dockerfile)
 ### [requirements.txt](./requirements.txt)
 ### [docker-compose.yaml](./docker-compose.yaml)
