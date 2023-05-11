@@ -148,9 +148,11 @@ def add_graph_to_db(city_id: int, file_path: str, city_name: str) -> None:
                                    'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link') # , 'residential','living_street'
             
             road_file_path = file_path[:-8] + "_highway.osm.pbf"
-            command = f'''/osmosis/bin/osmosis --read-pbf-fast file="{file_path}" --tf accept-ways highway={",".join(required_road_types)} --used-node --write-pbf file="{road_file_path}" \
-                && /osmosis/bin/osmosis --read-pbf-fast file="{road_file_path}" --write-pgsimp authFile="{AUTH_FILE_PATH}" \
-                && rm {road_file_path}'''
+            command = f'''/osmosis/bin/osmosis --read-pbf-fast file="{file_path}" --tf accept-ways highway={",".join(required_road_types)} \
+                          --tf reject-ways side_road=yes --used-node --write-pbf omitmetadata=true file="{road_file_path}" \
+                          && /osmosis/bin/osmosis --read-pbf-fast file="{road_file_path}" --write-pgsimp authFile="{AUTH_FILE_PATH}" \
+                          && rm {road_file_path}
+                       '''
             res = os.system(command)     
 
             # Вставка в Ways
