@@ -2,7 +2,7 @@ version: '3.7'
 
 services:
   postgres:
-    image: postgres:12-alpine
+    image: postgis/postgis:12-3.3-alpine
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
@@ -10,12 +10,16 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432"
+      - "54321:5432"
 
   webserver:
     build:
       context: api/
     image: fastapi_service
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=fastapi_database
     volumes:
       - type: volume
         source: logsvol

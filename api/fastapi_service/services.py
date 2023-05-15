@@ -1,4 +1,4 @@
-from database import engine, Base, SessionLocal, database
+from database import engine, Base, SessionLocal, database, DATABASE_URL
 from models import City, CityProperty, Point
 from shapely.geometry.point import Point as ShapelyPoint
 from database import *
@@ -10,7 +10,7 @@ from shapely.ops import unary_union
 from geopandas.geodataframe import GeoDataFrame
 from pandas.core.frame import DataFrame
 from osm_handler import parse_osm
-from typing import List, TYPE_CHECKING
+from typing import List, Iterable, Union, TYPE_CHECKING
 from sqlalchemy import update, text
 
 import pandas as pd
@@ -24,6 +24,10 @@ import time
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+
+AUTH_FILE_PATH = "./data/db.properties"
+
 
 def get_db():
     db = SessionLocal()
@@ -125,93 +129,189 @@ def add_info_to_db(city_df : DataFrame):
         downloaded = city_db.downloaded
         city_id = city_db.id
     conn.close()
-    file_path = f'./data/cities_osm/{city_name}.osm'
+    file_path = f'./data/cities_osm/{city_name}.osm.pbf'
     if (not downloaded) and (os.path.exists(file_path)):
         print("ANDO NOW IM HERE")
-        add_graph_to_db(city_id=city_id, file_path=file_path)
+        add_graph_to_db(city_id=city_id, file_path=file_path, city_name=city_name)
 
 
-def add_graph_to_db(city_id : int, file_path : str):
-        ways, nodes = parse_osm(file_path)
+def add_graph_to_db(city_id: int, file_path: str, city_name: str) -> None:
+        try:
+            conn = engine.connect()
+            # with open("/osmosis/script/pgsimple_schema_0.6.sql", "r") as f:
+            #     query = text(f.read())
+            #     conn.execute(query) -U user -d fastapi_database
+            command = f"psql {DATABASE_URL} -f /osmosis/script/pgsimple_schema_0.6.sql"
+            res = os.system(command)
 
-        conn = engine.connect()
-        for key in nodes.keys():
-            point_dict = nodes[key]
-            lat = point_dict.pop('lat')
-            lon = point_dict.pop('lon')
-            try:
-                query = PointAsync.insert().values(id=f"{key}", latitude=f'{lat}', longitude=f'{lon}')
-                res = conn.execute(query)
-            except:
-                pass
-            for key2 in point_dict.keys():
-                try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
-                except:
-                    pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = PointPropertyAsync.insert().values(id_point=f"{key}",id_property=f"{prop_id}", value = f"{point_dict[key2]}")
-                    res = conn.execute(query)
-                except:
-                    pass
+            required_road_types = ('motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'road', 'unclassified', 'residential',
+                                   'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link') # , 'residential','living_street'
+            
+            road_file_path = file_path[:-8] + "_highway.osm.pbf"
+            command = f'''/osmosis/bin/osmosis --read-pbf-fast file="{file_path}" --tf accept-ways highway={",".join(required_road_types)} \
+                          --tf reject-ways side_road=yes --used-node --write-pbf omitmetadata=true file="{road_file_path}" \
+                          && /osmosis/bin/osmosis --read-pbf-fast file="{road_file_path}" --write-pgsimp authFile="{AUTH_FILE_PATH}" \
+                          && rm {road_file_path}
+                       '''
+            res = os.system(command)     
 
-        for key in ways.keys():
-            try:
-                query = WayAsync.insert().values(id = f"{key}", id_city = f"{city_id}")
-                conn.execute(query)
-            except:
-                pass
-            graph = ways[key].pop('graph')
-            way_dict = ways[key]
-            oneway = False
-            if "oneway" in way_dict.keys() and way_dict['oneway'] == "yes": # доделать oneway
-                oneway = True
-            for edge in graph:
-                try:
-                    query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[0]}', id_dist=f'{edge[1]}')
-                    res = conn.execute(query)
-                except:
-                    pass
-                if not oneway:
-                    try:
-                        query = EdgesAsync.insert().values(id_way = f'{key}', id_src=f'{edge[1]}', id_dist=f'{edge[0]}')
-                        res = conn.execute(query)
-                    except:
-                        pass
-                
-            for key2 in way_dict.keys():
-                try:
-                    query = PropertyAsync.select().where(PropertyAsync.c.property == f"{key2}")
-                    prop = conn.execute(query).first()
-                except:
-                    pass
-                if prop != None:
-                    prop_id = prop.id
-                else:
-                    try:
-                        query = PropertyAsync.insert().values(property=f"{key2}")
-                        prop_id = conn.execute(query).inserted_primary_key[0]
-                        prop_id = int(prop_id)
-                    except:
-                        pass
-                try:
-                    query = WayPropertyAsync.insert().values(id_way=f'{key}',id_property=f'{prop_id}', value = f'{way_dict[key2]}')
-                    conn.execute(query)
-                except:
-                    pass
-        query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
-        conn.execute(query)
-        conn.close()
+            # Вставка в Ways
+            query = text(
+                f"""
+                INSERT INTO "Ways" (id, id_city)
+                SELECT w.id,
+                {city_id}
+                FROM ways w
+                ;
+                """
+            )
+            # WHERE wt.k LIKE 'highway'
+            # AND wt.v IN ({"'"+"', '".join(required_road_types)+"'"})
+            # query = WayAsync.insert().from_select(["id", "id_city"], select_query)
+            res = conn.execute(query)
+
+            # Вставка в Points
+            query = text(
+                """INSERT INTO "Points" ("id", "longitude", "latitude")
+                SELECT DISTINCT n.id,
+                ST_X(n.geom) AS longitude, 
+                ST_Y(n.geom) AS latitude
+                FROM nodes n
+                JOIN way_nodes wn ON wn.node_id = n.id
+                JOIN "Ways" w ON w.id = wn.way_id;
+                """)
+            # query = PointAsync.insert().from_select(["id", "longitude", "latitude"], select_query)
+            res = conn.execute(query)
+
+            # Вставка в Properties для Ways
+            query = text(
+                """INSERT INTO "Properties" (property)
+                SELECT DISTINCT wt.k
+                FROM way_tags wt
+                JOIN "Ways" w ON w.id = wt.way_id
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в Properties для Points
+            query = text(
+                """INSERT INTO "Properties" (property)
+                SELECT DISTINCT *
+                FROM
+                (SELECT DISTINCT nt.k
+                FROM node_tags nt
+                JOIN "Points" p ON p.id = nt.node_id
+                UNION
+                SELECT DISTINCT wt.k
+                FROM way_tags wt
+                JOIN "Ways" w ON w.id = wt.way_id
+                ) p
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в WayProperties, используя значения из Properties
+            query = text(
+                """INSERT INTO "WayProperties" (id_way, id_property, value)
+                SELECT wt.way_id,
+                p.id,
+                wt.v
+                FROM way_tags wt
+                JOIN "Ways" w ON w.id = wt.way_id
+                JOIN "Properties" p ON p.property LIKE wt.k
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в PointProperties, используя значения из Properties
+            query = text(
+                """INSERT INTO "PointProperties" (id_point, id_property, value)
+                SELECT nt.node_id,
+                pr.id,
+                nt.v
+                FROM node_tags nt
+                JOIN "Points" pt ON pt.id = nt.node_id
+                JOIN "Properties" pr ON pr.property LIKE nt.k
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в Edges дорог с пометкой oneway
+            query = text(
+                """INSERT INTO "Edges" (id_way, id_src, id_dist)
+                SELECT 
+                wn.way_id,
+                wn.node_id,
+                wn2.node_id
+                FROM "Ways" w
+                JOIN way_nodes wn ON wn.way_id = w.id 
+                JOIN way_tags wt ON wt.way_id = wn.way_id 
+                JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+                WHERE wt.k like 'oneway'
+                AND wt.v like 'yes'
+                AND wn.sequence_id + 1 = wn2.sequence_id
+                ORDER BY wn.sequence_id;
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в Edges дорог без пометки oneway
+            query = text(
+                """WITH oneway_way_id AS (
+                SELECT
+                    w.id
+                FROM ways w
+                JOIN way_tags wt ON wt.way_id = w.id 
+                WHERE (wt.k like 'oneway'
+                AND wt.v like 'yes')
+                )
+                INSERT INTO "Edges" (id_way, id_src, id_dist)
+                SELECT 
+                wn.way_id,
+                wn.node_id,
+                wn2.node_id
+                FROM "Ways" w
+                JOIN way_nodes wn ON wn.way_id = w.id
+                JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+                WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
+                AND wn.sequence_id + 1 = wn2.sequence_id
+                ORDER BY wn.sequence_id;
+                """
+            )
+            res = conn.execute(query)
+
+            # Вставка в Edges обратных дорог без пометки oneway
+            query = text(
+                """WITH oneway_way_id AS (
+                SELECT
+                    w.id
+                FROM ways w
+                JOIN way_tags wt ON wt.way_id = w.id 
+                WHERE (wt.k like 'oneway'
+                AND wt.v like 'yes')
+                )
+                INSERT INTO "Edges" (id_way, id_src, id_dist)
+                SELECT 
+                wn.way_id,
+                wn2.node_id,
+                wn.node_id
+                FROM "Ways" w
+                JOIN way_nodes wn ON wn.way_id = w.id
+                JOIN way_nodes wn2 ON wn2.way_id = wn.way_id 
+                WHERE w.id NOT IN (SELECT id FROM oneway_way_id)
+                AND wn.sequence_id + 1 = wn2.sequence_id
+                ORDER BY wn2.sequence_id DESC;
+                """
+            )
+            res = conn.execute(query)
+
+            query = update(CityAsync).where(CityAsync.c.id == f"{city_id}").values(downloaded = True)
+            conn.execute(query)
+
+            conn.close()
+        except Exception:
+            print(f"Can't download {city_name} with id {city_id}")
+        
 
 def add_point_to_db(df : DataFrame) -> int:
     with SessionLocal.begin() as session:
@@ -239,67 +339,67 @@ def init_db(cities_info : DataFrame):
         add_info_to_db(cities_info.loc[row, :])
 
 
-async def download_info(city : City, extension : float) -> bool:
-    filePath = f'./data/graphs/{city}.osm'
-    if os.path.isfile(filePath):
-        print(f'Exists: {filePath}')
-        return True
-    else:
-        print(f'Loading: {filePath}')
-        query = {'city': city.city_name}
-        try:
-            city_info = ox.geocode_to_gdf(query)
+# async def download_info(city : City, extension : float) -> bool:
+#     filePath = f'./data/graphs/{city}.osm.pbf'
+#     if os.path.isfile(filePath):
+#         print(f'Exists: {filePath}')
+#         return True
+#     else:
+#         print(f'Loading: {filePath}')
+#         query = {'city': city.city_name}
+#         try:
+#             city_info = ox.geocode_to_gdf(query)
 
-            north = city_info.iloc[0]['bbox_north']  
-            south = city_info.iloc[0]['bbox_south']
-            delta = (north-south) * extension / 200
-            north += delta
-            south -= delta
+#             north = city_info.iloc[0]['bbox_north']  
+#             south = city_info.iloc[0]['bbox_south']
+#             delta = (north-south) * extension / 200
+#             north += delta
+#             south -= delta
 
-            east = city_info.iloc[0]['bbox_east'] 
-            west = city_info.iloc[0]['bbox_west']
-            delta = (east-west) * extension / 200
-            east += delta
-            west -= delta
+#             east = city_info.iloc[0]['bbox_east'] 
+#             west = city_info.iloc[0]['bbox_west']
+#             delta = (east-west) * extension / 200
+#             east += delta
+#             west -= delta
 
-            G = ox.graph_from_bbox(north=north, south=south, east=east, west=west, simplify=True, network_type='drive',)
-            ox.save_graph_xml(G, filepath=filePath)
-            return True
+#             G = ox.graph_from_bbox(north=north, south=south, east=east, west=west, simplify=True, network_type='drive',)
+#             ox.save_graph_xml(G, filepath=filePath)
+#             return True
 
-        except ValueError:
-            print('Invalid city name')
-            return False
+#         except ValueError:
+#             print('Invalid city name')
+#             return False
 
-def delete_info(city : City) -> bool:
-    filePath = f'./data/graphs/{city}.osm'
-    if os.path.isfile(filePath):
-        os.remove(filePath)
-        print(f'Deleted: {filePath}')
-        return True
-    else:
-        print(f"File doesn't exist: {filePath}")
-        return False
+# def delete_info(city : City) -> bool:
+#     filePath = f'./data/graphs/{city}.osm.pbf'
+#     if os.path.isfile(filePath):
+#         os.remove(filePath)
+#         print(f'Deleted: {filePath}')
+#         return True
+#     else:
+#         print(f"File doesn't exist: {filePath}")
+#         return False
         
 
-async def download_city(city_id : int, extension : float) -> CityBase:
-    query = CityAsync.select().where(CityAsync.c.id == city_id)
-    city = await database.fetch_one(query)
-    if city is None:
-        return None
+# async def download_city(city_id : int, extension : float) -> CityBase:
+#     query = CityAsync.select().where(CityAsync.c.id == city_id)
+#     city = await database.fetch_one(query)
+#     if city is None:
+#         return None
         
-    city.downloaded = await download_info(city=city, extension=extension)
+#     city.downloaded = await download_info(city=city, extension=extension)
 
-    return city_to_scheme(city=city)
+#     return city_to_scheme(city=city)
 
-async def delete_city(city_id : int) -> CityBase:
-    query = CityAsync.select().where(CityAsync.c.id == city_id)
-    city = await database.fetch_one(query)
-    if city is None:
-        return None
+# async def delete_city(city_id : int) -> CityBase:
+#     query = CityAsync.select().where(CityAsync.c.id == city_id)
+#     city = await database.fetch_one(query)
+#     if city is None:
+#         return None
         
-    delete_info(city=city)
-    city.downloaded = False
-    return await city_to_scheme(city=city)
+#     delete_info(city=city)
+#     city.downloaded = False
+#     return await city_to_scheme(city=city)
 
 def to_list(polygon : LineString):
     list = []
@@ -394,6 +494,7 @@ def record_obj_to_wprop(record):
 def record_obj_to_pprop(record):
     return [record.id_point ,record.property ,record.value]
 
+
 async def graph_from_poly(city_id, polygon):
     bbox = polygon.bounds   # min_lon, min_lat, max_lon, max_lat
 
@@ -402,32 +503,86 @@ async def graph_from_poly(city_id, polygon):
     if city is None or not city.downloaded:
         return None, None, None, None
     query = text(
-        f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
-        WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
-        """)
+        f"""SELECT p.id, p.longitude, p.latitude 
+        FROM "Points" p
+        JOIN "Edges" e ON e.id_src = p.id 
+        JOIN "Ways" w ON e.id_way = w.id 
+        WHERE w.id_city = {city_id}
+        AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+        AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]});
+        """
+    )
+    # query = text(
+    #     f"""SELECT "Points".id, "Points".longitude, "Points".latitude FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id})AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id
+    #     WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]};
+    #     """)
     res = await database.fetch_all(query)
     points = list(map(point_obj_to_list, res)) # [...[id, longitude, latitude]...]
+
     q = PropertyAsync.select().where(PropertyAsync.c.property == 'name')
     prop = await database.fetch_one(q)
-    prop_id = prop.id
+    prop_id_name = prop.id
+
+    q = PropertyAsync.select().where(PropertyAsync.c.property == 'highway')
+    prop = await database.fetch_one(q)
+    prop_id_highway = prop.id
+
+    road_types = ('motorway', 'trunk', 'primary', 'secondary', 'tertiary',
+                  'motorway_link', 'trunk_link', 'primary_link', 'secondary_link', 'tertiary_link')
+    road_types_query = build_in_query('value', road_types)
     query = text(
-        f"""SELECT id, id_way, id_src, id_dist, value FROM 
-        (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
-        (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
-        (SELECT "Points".id as point_id FROM 
-        (SELECT id_src FROM "Edges" JOIN 
-        (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
-        p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
-        """)
+        f"""WITH named_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE wp.id_property = {prop_id_name}
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        ),
+        unnamed_streets AS (
+            SELECT e.id AS id, e.id_way AS id_way, e.id_src AS id_src, e.id_dist AS id_dist, wp.value AS value
+            FROM "Edges" e 
+            JOIN "WayProperties" wp ON wp.id_way = e.id_way 
+            JOIN "Ways" w ON w.id = e.id_way 
+            JOIN "Points" p ON p.id = e.id_src 
+            WHERE e.id_way NOT IN (
+                SELECT id_way
+                FROM named_streets
+            )
+            AND (wp.id_property = {prop_id_highway} AND {road_types_query})
+            AND w.id_city = {city_id}
+            AND (p.longitude BETWEEN {bbox[0]} AND {bbox[2]})
+            AND (p.latitude BETWEEN {bbox[1]} AND {bbox[3]})
+        )
+        SELECT id, id_way, id_src, id_dist, value
+        FROM named_streets
+        UNION
+        SELECT id, id_way, id_src, id_dist, NULL
+        FROM unnamed_streets
+        ;
+        """
+    )
+    # query = text(
+    #     f"""SELECT id, id_way, id_src, id_dist, value FROM 
+    #     (SELECT id, "Edges".id_way, id_src, id_dist, value FROM "Edges" JOIN 
+    #     (SELECT id_way, value FROM "WayProperties" WHERE id_property = {prop_id}) AS q ON "Edges".id_way = q.id_way) AS a JOIN 
+    #     (SELECT "Points".id as point_id FROM 
+    #     (SELECT id_src FROM "Edges" JOIN 
+    #     (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = {city_id}) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON
+    #     p.id_src = "Points".id WHERE "Points".longitude < {bbox[2]} and "Points".longitude > {bbox[0]} and "Points".latitude > {bbox[1]} and "Points".latitude < {bbox[3]}) AS b ON a.id_src = b.point_id; 
+    #     """)
     res = await database.fetch_all(query)
     edges = list(map(edge_obj_to_list, res)) # [...[id, id_way, from, to, name]...]
-
     points, edges, ways_prop_ids, points_prop_ids  = filter_by_polygon(polygon=polygon, edges=edges, points=points)
+
     conn = engine.connect()
 
-    ids_ways = build_or_query('id_way', ways_prop_ids)
+    ids_ways = build_in_query('id_way', ways_prop_ids)
     query = text(
         f"""SELECT id_way, property, value FROM 
         (SELECT id_way, id_property, value FROM "WayProperties" WHERE {ids_ways}) AS p 
@@ -437,7 +592,7 @@ async def graph_from_poly(city_id, polygon):
     res = conn.execute(query).fetchall()
     ways_prop = list(map(record_obj_to_wprop, res))
 
-    ids_points = build_or_query('id_point', points_prop_ids)
+    ids_points = build_in_query('id_point', points_prop_ids)
     query = text(
         f"""SELECT id_point, property, value FROM 
         (SELECT id_point, id_property, value FROM "PointProperties" WHERE {ids_points}) AS p 
@@ -449,12 +604,19 @@ async def graph_from_poly(city_id, polygon):
 
     return points, edges, points_prop, ways_prop    
 
-def build_or_query(query_field : str, data_set : set()):
-    buffer = ''
-    for element in data_set:
-        buffer += f'{query_field} = {element} OR '
 
-    return buffer[0:len(buffer)-4]
+def build_in_query(query_field : str, values : Iterable[Union[int, str]]):
+    first_value = next(iter(values))
+    if isinstance(first_value, int):
+        elements = ", ".join(map(str, values))
+        buffer = f"{query_field} IN ({elements})"
+        return buffer
+    elif isinstance(first_value, str):
+        elements = "', '".join(values)
+        buffer = f"{query_field} IN ('{elements}')"
+        return buffer
+    return ""
+
 
 def filter_by_polygon(polygon, edges, points):
     points_ids = set()
@@ -500,7 +662,7 @@ nodata = '-'
 merging_col = 'id_way'
 
 
-def union_and_delete(graph):
+def union_and_delete(graph: nx.Graph):
     edge_to_remove = list()
 
     for source, target, attributes in graph.edges(data=True):
@@ -542,15 +704,15 @@ def reverse_graph(graph):
     return new_graph
 
 
-def convert_to_df(graph, source='source', target='target'):
+def convert_to_df(graph: nx.Graph, source='source', target='target'):
     edges_df = nx.to_pandas_edgelist(graph, source='source_way', target='target_way')
     nodes_df = pd.DataFrame.from_dict(graph.nodes, orient='index')
 
     return edges_df, nodes_df
 
 
-def get_reversed_graph(graph, source='source', target='target', merging_column='way_id', empty_cell_sign='-',
-                       edge_attr=['way_id']):
+def get_reversed_graph(graph: DataFrame, source: str = 'source', target: str = 'target', merging_column: str ='way_id', empty_cell_sign: str = '-',
+                       edge_attr: List[str] = ['way_id']):
     global nodata
     global merging_col
     nodata = empty_cell_sign

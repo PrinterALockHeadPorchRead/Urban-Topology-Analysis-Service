@@ -3,3 +3,10 @@ node_modules
 logs
 __pycache__
 package-lock.json
+cache/*
+api/cities_osm/*.osm
+*.osm
+*.pbf
+properties
+*.pbf
+analytics/
