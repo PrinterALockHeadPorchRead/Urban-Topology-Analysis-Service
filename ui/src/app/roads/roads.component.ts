@@ -59,10 +59,15 @@ export class RoadsComponent implements OnInit {
     Object.values(gd.edges).forEach(edge => {
       if(edge.way_id)
       if(!roads[edge.way_id]) {
+        if (edge.name) {
+          var road_color = iwanthue(1, {seed: edge.name})[0]
+        } else {
+          var road_color = '#ebebeb'
+        }
         roads[edge.way_id] = L.polyline([
           [gd.nodes[edge.from].lat, gd.nodes[edge.from].lon],
           [gd.nodes[edge.to].lat, gd.nodes[edge.to].lon], 
-        ], {color: iwanthue(1, {seed: edge.way_id})[0], weight: 4}
+        ], {color: road_color, weight: 4}
         ).bindTooltip(edge.name || 'null').addTo(this.roads);
       } else {
         roads[edge.way_id].addLatLng([gd.nodes[edge.from].lat, gd.nodes[edge.from].lon]);
