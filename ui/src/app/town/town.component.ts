@@ -198,14 +198,14 @@ export class TownComponent implements OnInit, OnDestroy{
     const nodes: { [key: string]: INode } = {};
     const edges: { [key: string]: Edge } = {};
 
-    const names = this.RgraphData ? Object.values(this.RgraphData.edges).map(edge => ({id: edge.way_id, name: edge.name}) ) : [];
+    // const names = this.RgraphData ? Object.values(this.RgraphData.edges).map(edge => ({id: edge.way_id, name: edge.name}) ) : [];
 
     const node_lines = nodes_str.split('\n')
     node_lines.slice(1).forEach((line, index) => {
-      // const [id_way, node_id, cross_ways] = line.split(',\\');
-      const id_way = line.split(',"')[0];
+      const [id_way, name, street_ways] = line.split(',');
+      // const id_way = line.split(',"')[0];
 
-      const name = names.find(n => n.id == id_way)?.name;
+      // const name = names.find(n => n.id == id_way)?.name;
 
       if(id_way && name){
         nodes[Number(id_way)] = {

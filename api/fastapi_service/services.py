@@ -49,12 +49,7 @@ def list_to_csv_str(data, columns : List['str']):
     return buffer.getvalue(), df
 
 def reversed_graph_to_csv_str(edges_df : DataFrame):
-    redges_df, rnodes_df, rmatrix_df = get_reversed_graph(edges_df, 
-                                                          source='source', 
-                                                          target='target', 
-                                                          merging_column='id_way', 
-                                                          empty_cell_sign='', 
-                                                          edge_attr=['id_way'])
+    redges_df, rnodes_df = get_reversed_graph(edges_df, "id_way")
 
     redges = io.StringIO()
     rnodes = io.StringIO()
@@ -63,8 +58,8 @@ def reversed_graph_to_csv_str(edges_df : DataFrame):
     redges_df.to_csv(redges, index=False)
     rnodes_df.to_csv(rnodes, index=False)
     # rmatrix_df.to_csv(rmatrix, index=False)
-    
-    return redges.getvalue(), rnodes.getvalue(), None
+    return redges.getvalue(), rnodes.getvalue()
+
 
 def graph_to_scheme(points, edges, pprop, wprop) -> GraphBase:
     edges_str, edges_df = list_to_csv_str(edges, ['id', 'id_way', 'source', 'target', 'name'])
@@ -72,12 +67,13 @@ def graph_to_scheme(points, edges, pprop, wprop) -> GraphBase:
     pprop_str, _ = list_to_csv_str(pprop, ['id', 'property', 'value'])
     wprop_str, _ = list_to_csv_str(wprop, ['id', 'property', 'value'])
 
-    r_edges_str, r_nodes_str, r_matrix_str = reversed_graph_to_csv_str(edges_df)
+    r_edges_str, r_nodes_str = reversed_graph_to_csv_str(edges_df)
 
     return GraphBase(edges_csv=edges_str, points_csv=points_str, 
                      ways_properties_csv=wprop_str, points_properties_csv=pprop_str,
                      reversed_edges_csv=r_edges_str, reversed_nodes_csv=r_nodes_str)
                     #  reversed_matrix_csv=r_matrix_str)
+
 
 async def property_to_scheme(property : CityProperty) -> PropertyBase:
     if property is None:
@@ -86,6 +82,7 @@ async def property_to_scheme(property : CityProperty) -> PropertyBase:
     return PropertyBase(population=property.population, population_density=property.population_density, 
                         time_zone=property.time_zone, time_created=str(property.time_created),
                         c_latitude = property.c_latitude, c_longitude = property.c_longitude)
+
 
 async def city_to_scheme(city : City) -> CityBase:
     if city is None:
@@ -602,20 +599,23 @@ async def graph_from_poly(city_id, polygon):
     res = conn.execute(query).fetchall()
     points_prop = list(map(record_obj_to_pprop, res))
 
+    conn.close()
+
     return points, edges, points_prop, ways_prop    
 
 
 def build_in_query(query_field : str, values : Iterable[Union[int, str]]):
     first_value = next(iter(values))
-    if isinstance(first_value, int):
-        elements = ", ".join(map(str, values))
-        buffer = f"{query_field} IN ({elements})"
-        return buffer
-    elif isinstance(first_value, str):
+    if isinstance(first_value, str):
         elements = "', '".join(values)
         buffer = f"{query_field} IN ('{elements}')"
         return buffer
-    return ""
+    else:
+    # if isinstance(first_value, int):
+        elements = ", ".join(map(str, values))
+        buffer = f"{query_field} IN ({elements})"
+        return buffer
+    # return ""
 
 
 def filter_by_polygon(polygon, edges, points):
@@ -641,88 +641,156 @@ def filter_by_polygon(polygon, edges, points):
     return points_filtred, edges_filtred, ways_prop_ids, points_ids
 
 
-query_for_citypoints_v1 = """
-SELECT "Points".id, "Points".longitude, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110)AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id;
-"""
-
-query_for_cityp_bbox_v1 = """
-SELECT "Points".id, "Points".longitude, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110)AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id WHERE "Points".longitude < 91.4 and "Points".longitude > 91.395 and "Points".latitude > 53.75 and "Points".latitude < 53.77;
-"""
-
-query_for_edges_wnames_v1="""
-SELECT id, id_src, id_dist, value FROM (SELECT id, id_src, id_dist, id_way FROM "Edges" JOIN (SELECT
-"Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) e JOIN (SELECT id_way, value FROM "WayProperties" WHERE id_property = 3) p ON e.id_way = p.id_way;
-"""
-
-q = """
-SELECT "Points".id, "Points".latitude FROM (SELECT id_src FROM "Edges" JOIN (SELECT "Ways".id as way_id FROM "Ways" WHERE "Ways".id_city = 110) AS w ON "Edges".id_way = w.way_id) AS p JOIN "Points" ON p.id_src = "Points".id WHERE "Points".longitude > 91.4;
-"""
-
-nodata = '-'
-merging_col = 'id_way'
+# nodata = '-'
+# merging_col = 'id_way'
 
 
-def union_and_delete(graph: nx.Graph):
-    edge_to_remove = list()
+# def union_and_delete(graph: nx.Graph):
+#     edge_to_remove = list()
 
-    for source, target, attributes in graph.edges(data=True):
-        attributes['node_id'] = {source, target}
-        attributes['cross_ways'] = set()
-        try:
-            for id1, id2, attr in graph.edges(data=True):
-                if source == id1 and target == id2:
-                    continue
-                if (attributes[merging_col] == attr[merging_col] and attributes[merging_col] != nodata) \
-                        and len(attributes['node_id'].intersection(attr['node_id'])):
-                    attributes['node_id'] = attributes['node_id'].union(attr['node_id'])
-                    attr['node_id'].clear()
-                    edge_to_remove.append((id1, id2))
-                elif (attributes[merging_col] != attr[merging_col] or attributes[merging_col] == nodata) \
-                        and len(attributes['node_id'].intersection({id1, id2})):
-                    if attr[merging_col] != nodata:
-                        attributes['cross_ways'].add(attr[merging_col])
-                    else:
-                        attributes['cross_ways'].add(str(id1) + str(nodata) + str(id2))
-        except:
-            continue
+#     for source, target, attributes in graph.edges(data=True):
+#         attributes['node_id'] = {source, target}
+#         attributes['cross_ways'] = set()
+#         try:
+#             for id1, id2, attr in graph.edges(data=True):
+#                 if source == id1 and target == id2:
+#                     continue
+#                 if (attributes[merging_col] == attr[merging_col] and attributes[merging_col] != nodata) \
+#                         and len(attributes['node_id'].intersection(attr['node_id'])):
+#                     attributes['node_id'] = attributes['node_id'].union(attr['node_id'])
+#                     attr['node_id'].clear()
+#                     edge_to_remove.append((id1, id2))
+#                 elif (attributes[merging_col] != attr[merging_col] or attributes[merging_col] == nodata) \
+#                         and len(attributes['node_id'].intersection({id1, id2})):
+#                     if attr[merging_col] != nodata:
+#                         attributes['cross_ways'].add(attr[merging_col])
+#                     else:
+#                         attributes['cross_ways'].add(str(id1) + str(nodata) + str(id2))
+#         except:
+#             continue
 
-    graph.remove_edges_from(edge_to_remove)
-
-
-def reverse_graph(graph):
-    new_graph = nx.Graph()
-
-    new_graph.add_nodes_from([(attr[merging_col], attr) if attr[merging_col] != nodata
-                              else (str(source) + str(nodata) + str(target), attr)
-                              for source, target, attr in graph.edges(data=True)])
-
-    for node_id, attributes in new_graph.nodes(data=True):
-        for id in new_graph.nodes():
-            if id in attributes['cross_ways']:
-                new_graph.add_edge(node_id, id)
-
-    return new_graph
+#     graph.remove_edges_from(edge_to_remove)
 
 
-def convert_to_df(graph: nx.Graph, source='source', target='target'):
-    edges_df = nx.to_pandas_edgelist(graph, source='source_way', target='target_way')
-    nodes_df = pd.DataFrame.from_dict(graph.nodes, orient='index')
+# def reverse_graph(graph):
+#     new_graph = nx.Graph()
 
+#     new_graph.add_nodes_from([(attr[merging_col], attr) if attr[merging_col] != nodata
+#                               else (str(source) + str(nodata) + str(target), attr)
+#                               for source, target, attr in graph.edges(data=True)])
+
+#     for node_id, attributes in new_graph.nodes(data=True):
+#         for id in new_graph.nodes():
+#             if id in attributes['cross_ways']:
+#                 new_graph.add_edge(node_id, id)
+
+#     return new_graph
+
+
+# def convert_to_df(graph: nx.Graph, source='source', target='target'):
+#     edges_df = nx.to_pandas_edgelist(graph, source='source_way', target='target_way')
+#     nodes_df = pd.DataFrame.from_dict(graph.nodes, orient='index')
+
+#     return edges_df, nodes_df
+
+
+# def get_reversed_graph(graph: DataFrame, source: str = 'source', target: str = 'target', merging_column: str ='way_id', empty_cell_sign: str = '-',
+#                        edge_attr: List[str] = ['way_id']):
+#     global nodata
+#     global merging_col
+#     nodata = empty_cell_sign
+#     merging_col = merging_column
+
+#     nx_graph = nx.from_pandas_edgelist(graph, source=source, target=target, edge_attr=edge_attr)
+#     adjacency_df = nx.to_pandas_adjacency(nx_graph, weight=merging_column, dtype=int)
+#     union_and_delete(nx_graph)
+
+#     new_graph = reverse_graph(nx_graph)
+#     edges_ds, nodes_df = convert_to_df(new_graph, source='source_way', target='target_way')
+#     return edges_ds, nodes_df, adjacency_df
+
+def squeeze_graph(df_original: DataFrame) -> DataFrame:
+    """Очишение исходного DataFrame от неименнованных таблиц и связывание именнованных улиц через неименнованные, путем зацикливания.
+    """
+    df = df_original.copy(deep=True)
+    df_streets_nan_right = df.loc[(df["street_name1"].notna()) & (df["street_name2"].isna())] # Связи с левой именнованной улицей и правой неименнованной
+    df_streets_nan_left = df.loc[df["street_name1"].isna()] # Связи с левой неименнованной улицей
+    df = df.loc[(df["street_name1"].notna()) & (df["street_name2"].notna())] # Удаление связей с неименнованными улицами
+    visited_streets = set(df_streets_nan_right.apply(lambda x: str(x["id_way1"]), axis=1) + "_" + df_streets_nan_right.apply(lambda x: str(x["id_way2"]), axis=1)) # Отмечаем посещенные связи
+    while True:
+        df_conn_nan_streets = df_streets_nan_right.join(df_streets_nan_left.set_index("id_way1"), on="id_way2", how="inner", lsuffix="in", rsuffix="out") # К левым именнованным добавляем левые неименнованные
+        df_conn_nan_streets = df_conn_nan_streets.loc[df_conn_nan_streets["crossroadin"] != df_conn_nan_streets["crossroadout"]] # Проверка на разные перекрестки для связей
+        if df_conn_nan_streets.empty: # Проверка на наличие улиц
+            break
+        df_conn_nan_streets = df_conn_nan_streets.loc[~(df_conn_nan_streets.apply(lambda x: str(x["id_way2in"]), axis=1) + "_" + \
+                                                    df_conn_nan_streets.apply(lambda x: str(x["id_way2out"]), axis=1)).isin(visited_streets)] # Проверка на посещенные связи
+        if df_conn_nan_streets.empty: # Проверка на наличие улиц
+            break
+        new_visited_streets = set(df_conn_nan_streets.apply(lambda x: str(x["id_way2in"]), axis=1) + "_" + df_conn_nan_streets.apply(lambda x: str(x["id_way2out"]), axis=1)) # Новые посещенные связи
+        visited_streets = visited_streets.union(new_visited_streets) # Обновление
+        df_conn_nan_streets = df_conn_nan_streets[["crossroadout", "street_name1in", "id_way1", "street_name2out", "id_way2out"]] # Выборка
+        df_conn_nan_streets = df_conn_nan_streets.rename(columns={"crossroadout": "crossroad", "street_name1in": "street_name1", "street_name2out": "street_name2", "id_way2out": "id_way2"}) # Переименование
+        df_to_add = df_conn_nan_streets.loc[(df_conn_nan_streets["street_name2"].notna()) & (df_conn_nan_streets["street_name1"] != df_conn_nan_streets["street_name2"])].drop_duplicates() # Связи, для которых были найдены правые именнованые улицы
+        df = pd.concat([df, df_to_add], ignore_index=True) # Добавление этих связей к основным
+        df_streets_nan_right = df_conn_nan_streets.loc[(df_conn_nan_streets["street_name2"].isna())] # Обновление связей с левой именнованной улицей и правой неименнованной
+    return df
+
+
+def get_reversed_graph(graph: DataFrame, way_column: str):
+    way_ids = graph[way_column]
+    in_query_way_ids = build_in_query("w.id", way_ids)
+
+    conn = engine.connect()
+    query = text(
+        f"""WITH way_names AS
+        (
+            SELECT 
+                wp.id_way,
+                wp.value AS name
+            FROM "WayProperties" wp
+                JOIN "Properties" p ON wp.id_property = p.id
+            WHERE p.property = 'name'
+        )
+        , city_way_names AS
+        (
+            SELECT 
+                w.id,
+                wn.name
+            FROM "Ways" w
+                LEFT JOIN way_names wn ON w.id = wn.id_way
+            WHERE {in_query_way_ids}
+        )
+        SELECT 
+            e1.id_dist AS crossroad,
+            wn1.name AS street_name1,
+            wn1.id AS id_way1,
+            wn2.name AS street_name2,
+            wn2.id AS id_way2
+        FROM "Edges" e1
+        JOIN "Edges" e2 ON e1.id_src = e2.id_dist AND e1.id_way <> e2.id_way
+        JOIN city_way_names wn1 ON e1.id_way = wn1.id
+        JOIN city_way_names wn2 ON e2.id_way = wn2.id
+        WHERE (wn1.name <> wn2.name) OR (wn1.name IS NULL OR wn2.name IS NULL)
+        """)
+    
+    # res = await database.fetch_all(query)
+    res = conn.execute(query).fetchall()
+
+    conn.close()
+    street_connection = list(map(lambda x: (x.crossroad, x.street_name1, x.id_way1, x.street_name2, x.id_way2), res))
+    df = DataFrame(street_connection, columns=["crossroad", "street_name1", "id_way1", "street_name2", "id_way2"])
+
+    # Получение именнованных улиц и их составляющих
+    df_named_pairs = df.loc[(df["street_name1"].notna()) & (df["street_name2"].notna())]
+    df_street_way = pd.concat([df_named_pairs[["street_name1", "id_way1"]], \
+                               df_named_pairs[["street_name2", "id_way2"]].rename(columns={"street_name2": "street_name1", "id_way2": "id_way1"})]).drop_duplicates().reset_index(drop=True)
+    
+    nodes_df = df_street_way.groupby("street_name1", group_keys=False).agg(lambda x: set(x)).reset_index().rename(columns={"street_name1": "street_name", "id_way1": "id_way"}).reset_index()
+
+    # Получение связей улиц
+    df_connections = squeeze_graph(df)
+    df_connections = df_connections.join(nodes_df[["index", "street_name"]].set_index("street_name"), on="street_name1", how="inner").rename(columns={"index": "src_index"})
+    df_connections = df_connections.join(nodes_df[["index", "street_name"]].set_index("street_name"), on="street_name2", how="inner").rename(columns={"index": "dest_index"})
+    edges_df = df_connections[["src_index", "dest_index"]].drop_duplicates().reset_index(drop=True)
     return edges_df, nodes_df
-
-
-def get_reversed_graph(graph: DataFrame, source: str = 'source', target: str = 'target', merging_column: str ='way_id', empty_cell_sign: str = '-',
-                       edge_attr: List[str] = ['way_id']):
-    global nodata
-    global merging_col
-    nodata = empty_cell_sign
-    merging_col = merging_column
-
-    nx_graph = nx.from_pandas_edgelist(graph, source=source, target=target, edge_attr=edge_attr)
-    adjacency_df = nx.to_pandas_adjacency(nx_graph, weight=merging_column, dtype=int)
-    union_and_delete(nx_graph)
-
-    new_graph = reverse_graph(nx_graph)
-    edges_ds, nodes_df = convert_to_df(new_graph, source='source_way', target='target_way')
-    return edges_ds, nodes_df, adjacency_df
 
